@@ -62,6 +62,24 @@ def detect_lines(image):
 	#show('Image', image)
 	select_trapezoid(image)
 
+
+def cannyedge(image, lowerbound, upperbound):
+	'''
+	applies canny edge detector to get lane markings
+	'''
+	return cv2.Canny(image,lowerbound,upperbound)
+
+def yellowlane(image):
+	'''
+	convert image to hsv to get yellow channel, and gray scale to get white channel
+	'''
+	hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
+	gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+	lowery = np.array([20, 100, 100], dtype = "uint8")
+	uppery = np.array([30, 255, 255], dtype="uint8")
+	grays = cv2.inRange(gray, 200, 255)
+	yellow = cv2.inRange(hsv, lowery, uppery)
+
 if __name__ == '__main__':
 	for file in sys.argv[1:]:
 		detect_lines(cv2.imread(file))
