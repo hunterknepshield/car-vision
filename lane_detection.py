@@ -17,8 +17,8 @@ def show_with_axes(name, image):
 	A wrapper for pyplot.imshow, which includes axes. Naturally, cv2 uses
 	BGR instead of RGB, so we need to correct for that.
 	'''
-	print(name)
 	plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+	plt.title(name)
 	plt.show()
 
 def select_trapezoid(image):
@@ -27,19 +27,33 @@ def select_trapezoid(image):
 	slightly above the center of the image.
 	'''
 	(rows, cols) = (image.shape[0], image.shape[1])
-	bl = (int(cols*.1), int(rows))
-	br = (int(cols*.9), int(rows))
-	tl = (int(cols*.45), int(rows*.5))
-	tr = (int(cols*.55), int(rows*.5))
+	bottom_left = (int(cols*.1), int(rows))
+	bottom_right = (int(cols*.9), int(rows))
+	top_left = (int(cols*.45), int(rows*.6))
+	top_right = (int(cols*.55), int(rows*.6))
 
 	# For debugging purposes...
-	#'''	
-	cv2.line(image, bl, br, (0, 0, 255), 10) # Red
-	cv2.line(image, br, tr, (0, 255, 0), 10) # Green
-	cv2.line(image, tr, tl, (255, 0, 0), 10) # Blue
-	cv2.line(image, tl, bl, (255, 255, 255), 10) # White
-	show_with_axes('Lines', image)
 	#'''
+	lines = image.copy()
+	cv2.line(lines, bottom_left, bottom_right, (0, 0, 255), 10) # Red
+	cv2.line(lines, bottom_right, top_right, (0, 255, 0), 10) # Green
+	cv2.line(lines, top_right, top_left, (255, 0, 0), 10) # Blue
+	cv2.line(lines, top_left, bottom_left, (255, 255, 255), 10) # White
+	show_with_axes('Lines', lines)
+	#'''
+
+	# cv2 really wants these points in clockwise order from top left
+	points = np.array([top_left, top_right, bottom_left, bottom_right], dtype=np.float32)
+	print(points)
+	width = bottom_right[0] - bottom_left[0]
+	height = bottom_left[1] - top_left[1]
+	new_perspective = np.array([[0, 0], [width, 0], [0, height], [width, height]], dtype=np.float32)
+	print(new_perspective)
+
+	perspective_matrix = cv2.getPerspectiveTransform(points, new_perspective)
+	print(perspective_matrix)
+	warped = cv2.warpPerspective(image, perspective_matrix, (width, height))
+	show_with_axes('Warped', warped)
 
 def detect_lines(image):
 	'''
