@@ -13,8 +13,12 @@ def show(name, image):
 	cv2.waitKey(1)
 
 def show_with_axes(name, image):
+	'''
+	A wrapper for pyplot.imshow, which includes axes. Naturally, cv2 uses
+	BGR instead of RGB, so we need to correct for that.
+	'''
 	print(name)
-	plt.imshow(image)
+	plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
 	plt.show()
 
 def select_trapezoid(image):
