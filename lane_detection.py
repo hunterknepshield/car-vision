@@ -42,13 +42,11 @@ def select_trapezoid(image):
 	show_with_axes('Lines', lines)
 	#'''
 
-	# cv2 really wants these points in clockwise order from top left
+	# Strange ordering, but cv2-imposed.
 	points = np.array([top_left, top_right, bottom_left, bottom_right], dtype=np.float32)
-	print(points)
 	width = bottom_right[0] - bottom_left[0]
 	height = bottom_left[1] - top_left[1]
 	new_perspective = np.array([[0, 0], [width, 0], [0, height], [width, height]], dtype=np.float32)
-	print(new_perspective)
 
 	perspective_matrix = cv2.getPerspectiveTransform(points, new_perspective)
 	print(perspective_matrix)
