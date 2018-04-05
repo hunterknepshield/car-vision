@@ -2,6 +2,13 @@ import cv2
 import numpy as np
 from matplotlib import pyplot as plt
 import sys
+import os
+
+#Set of supported image formats
+EXTENSIONS = set(['jpg','jpeg','jif','jfif','jp2','j2k','j2c','fpx','tif', \
+                  'tiff','pcd','png','ppm','webp','bmp','bpg','dib','wav', \
+				  'cgm','svg'])
+
 
 def show(name, image):
 	'''
@@ -12,6 +19,7 @@ def show(name, image):
 	cv2.destroyAllWindows()
 	cv2.waitKey(1)
 
+
 def show_with_axes(name, image):
 	'''
 	A wrapper for pyplot.imshow, which includes axes. Naturally, cv2 uses
@@ -20,6 +28,7 @@ def show_with_axes(name, image):
 	plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
 	plt.title(name)
 	plt.show()
+
 
 def select_trapezoid(image):
 	'''
@@ -53,6 +62,7 @@ def select_trapezoid(image):
 	warped = cv2.warpPerspective(image, perspective_matrix, (width, height))
 	show_with_axes('Warped', warped)
 
+
 def detect_lines(image):
 	'''
 	Works with static images. Ideally we can scale to videos easily.
@@ -67,17 +77,29 @@ def cannyedge(image, lowerbound, upperbound):
 	'''
 	return cv2.Canny(image,lowerbound,upperbound)
 
+
 def yellowlane(image):
 	'''
 	convert image to hsv to get yellow channel, and gray scale to get white channel
 	'''
 	hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
 	gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-	lowery = np.array([20, 100, 100], dtype = "uint8")
+	lowery = np.array([20, 100, 100], dtype="uint8")
 	uppery = np.array([30, 255, 255], dtype="uint8")
 	grays = cv2.inRange(gray, 200, 255)
 	yellow = cv2.inRange(hsv, lowery, uppery)
 
+
 if __name__ == '__main__':
+    '''
+    Manage input, output and program's operational flow
+    '''
+	if (len(sys.argv) < 2):
+		print('Error: No target provided')
+		sys.exit()
+
 	for file in sys.argv[1:]:
-		detect_lines(cv2.imread(file))
+		if not os.path.isdir(file) and file.split('.')[1].lower() in EXTENSIONS:
+			detect_lines(cv2.imread(file))
+		else:
+			print('Error: unsupported input: ' + str(file))
