@@ -6,8 +6,8 @@ import os
 
 #Set of supported image formats
 EXTENSIONS = set(['jpg','jpeg','jif','jfif','jp2','j2k','j2c','fpx','tif', \
-                  'tiff','pcd','png','ppm','webp','bmp','bpg','dib','wav', \
-				  'cgm','svg'])
+		  'tiff','pcd','png','ppm','webp','bmp','bpg','dib','wav', \
+		  'cgm','svg'])
 
 
 def show(name, image):
@@ -20,12 +20,12 @@ def show(name, image):
 	cv2.waitKey(1)
 
 
-def show_with_axes(name, image):
+def show_with_axes(name, image, conversion=cv2.COLOR_BGR2RGB):
 	'''
 	A wrapper for pyplot.imshow, which includes axes. Naturally, cv2 uses
-	BGR instead of RGB, so we need to correct for that.
+	BGR instead of RGB, so we need to correct for that. Can be overridden.
 	'''
-	plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+	plt.imshow(cv2.cvtColor(image, conversion))
 	plt.title(name)
 	plt.show()
 
@@ -42,7 +42,7 @@ def select_trapezoid(image):
 	top_right = (int(cols*.55), int(rows*.6))
 
 	# For debugging purposes...
-	#'''
+	'''
 	lines = image.copy()
 	cv2.line(lines, bottom_left, bottom_right, (0, 0, 255), 10) # Red
 	cv2.line(lines, bottom_right, top_right, (0, 255, 0), 10) # Green
@@ -55,12 +55,29 @@ def select_trapezoid(image):
 	points = np.array([top_left, top_right, bottom_left, bottom_right], dtype=np.float32)
 	width = bottom_right[0] - bottom_left[0]
 	height = bottom_left[1] - top_left[1]
-	new_perspective = np.array([[0, 0], [width, 0], [0, height], [width, height]], dtype=np.float32)
+	new_perspective = np.array([(0, 0), (width, 0), (0, height), (width, height)], dtype=np.float32)
 
 	perspective_matrix = cv2.getPerspectiveTransform(points, new_perspective)
 	print(perspective_matrix)
 	warped = cv2.warpPerspective(image, perspective_matrix, (width, height))
 	show_with_axes('Warped', warped)
+
+	# Warp back
+	undo_matrix = cv2.getPerspectiveTransform(new_perspective, points)
+	print(undo_matrix)
+	undone = cv2.warpPerspective(warped, undo_matrix, (cols, rows))
+	show_with_axes('Undone', undone)
+
+	# Change white to green then superimpose
+	mask = np.logical_and(undone[:,:,0] >= 200, undone[:,:,1] >= 200, undone[:,:,2] >= 200)
+	undone[mask] = (0, 255, 0)
+	show_with_axes('Changed', undone)
+	# TODO(hknepshield) is there an actual bounding box mask? We want the trapezoid back
+	replacement_region = np.logical_or(undone[:,:,0] > 25, undone[:,:,1] > 25, undone[:,:,2] > 25)
+	rr = np.repeat(replacement_region[:,:,np.newaxis], 3, axis=2)
+	np.putmask(image, rr, undone)
+	# TODO(hknepshield) minor tearing occurring here - close in the bounding box slightly?
+	show_with_axes('Superimposed', image)
 
 
 def detect_lines(image):
@@ -73,14 +90,14 @@ def detect_lines(image):
 
 def cannyedge(image, lowerbound, upperbound):
 	'''
-	applies canny edge detector to get lane markings
+	Applies canny edge detector to get lane markings
 	'''
 	return cv2.Canny(image,lowerbound,upperbound)
 
 
 def yellowlane(image):
 	'''
-	convert image to hsv to get yellow channel, and gray scale to get white channel
+	Convert image to hsv to get yellow channel, and gray scale to get white channel
 	'''
 	hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
 	gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
@@ -91,9 +108,9 @@ def yellowlane(image):
 
 
 if __name__ == '__main__':
-    '''
-    Manage input, output and program's operational flow
-    '''
+	'''
+	Manage input, output and program's operational flow
+	'''
 	if (len(sys.argv) < 2):
 		print('Error: No target provided')
 		sys.exit()
@@ -103,3 +120,4 @@ if __name__ == '__main__':
 			detect_lines(cv2.imread(file))
 		else:
 			print('Error: unsupported input: ' + str(file))
+
