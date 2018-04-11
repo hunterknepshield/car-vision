@@ -6,7 +6,7 @@ import cv2
 import sys
 import os
 from lane_detection import detect_lines
-#from vehicle_detection import detect_vehicles
+from vehicle_detection import detect_vehicles
 
 
 #Set of supported image formats
@@ -24,7 +24,7 @@ def perceive_road(file):
         TBD
     '''
     detect_lines(cv2.imread(file))
-    #detect_vehicles()
+    detect_vehicles()
 
 
 if __name__ == '__main__':
