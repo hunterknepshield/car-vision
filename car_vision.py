@@ -23,8 +23,8 @@ def perceive_road(file):
     @returns:
         TBD
     '''
-    detect_lines(cv2.imread(file))
-    detect_vehicles()
+    lane,path,full = detect_lines(cv2.imread(file))
+    detect_vehicles(path)
 
 
 if __name__ == '__main__':

@@ -1,12 +1,17 @@
+'''
+Simple vehicle detection implementation that determines if there is a vehicle
+ahead, calculates the distances to which and determines if we're encroaching on
+the vehicle ahead.
+'''
 import cv2
 import numpy as np
 
 
-def is_object_ahead():
+def object_ahead(lane):
     '''
     Determine whether or not there is an object or vehicle ahead on the projected path
     @params:
-        TBD
+        lane: image of the projected path for the vehicle
     @returns:
         block: true if there is object ahead or false otherwise
     '''
@@ -38,9 +43,14 @@ def collate_velocity():
     #TODO Implement
 
 
-def detect_vehicles():
+def detect_vehicles(lane):
     '''
     Detect vehicles
+    @params:
+        lane: segmented lane image of projected path
+    @returns:
+        TBD
     '''
-    #TODO Implement
     print('Initiating vehicle detection...')
+    if object_ahead(lane):
+        calc_distance()

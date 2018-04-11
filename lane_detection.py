@@ -72,13 +72,17 @@ def select_trapezoid(image):
 	# TODO(hknepshield) minor tearing occurring here - close in the bounding box slightly?
 	show_with_axes('Superimposed', image)
 
+	#TODO(rjswitzer3) - REMOVE [-b vehicle-detection DEV & TESTING ONLY]
+	return [warped, undone, image]
+
 
 def detect_lines(image):
 	'''
 	Works with static images. Ideally we can scale to videos easily.
 	'''
 	#show('Image', image)
-	select_trapezoid(image)
+	#TODO(rjswitzer3) - REMOVE [-b vehicle-detection DEV & TESTING ONLY]
+	return select_trapezoid(image)
 
 
 def cannyedge(image, lowerbound, upperbound):
