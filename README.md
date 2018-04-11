@@ -1,7 +1,7 @@
-# Red Light Green Light
+# Car Vision
 ### Description
-Rudimentary driver assistance system that provides lane depature detection, estimates
-distances of vehicles ahead, and highway cruise control supoort.
+Rudimentary driver assistance system that provides lane departure detection, estimates
+distances of vehicles ahead, and highway cruise control support.
 
 ### Requirements
 * Python 3.0+
@@ -11,5 +11,5 @@ distances of vehicles ahead, and highway cruise control supoort.
 
 ### Usage
 ```python
-python lane_detection.py <image path>
+python car_vision.py <image path>
 ```

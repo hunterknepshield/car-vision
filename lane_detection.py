@@ -1,13 +1,6 @@
 import cv2
 import numpy as np
 from matplotlib import pyplot as plt
-import sys
-import os
-
-#Set of supported image formats
-EXTENSIONS = set(['jpg','jpeg','jif','jfif','jp2','j2k','j2c','fpx','tif', \
-		  'tiff','pcd','png','ppm','webp','bmp','bpg','dib','wav', \
-		  'cgm','svg'])
 
 
 def show(name, image):
@@ -105,19 +98,3 @@ def yellowlane(image):
 	uppery = np.array([30, 255, 255], dtype="uint8")
 	grays = cv2.inRange(gray, 200, 255)
 	yellow = cv2.inRange(hsv, lowery, uppery)
-
-
-if __name__ == '__main__':
-	'''
-	Manage input, output and program's operational flow
-	'''
-	if (len(sys.argv) < 2):
-		print('Error: No target provided')
-		sys.exit()
-
-	for file in sys.argv[1:]:
-		if not os.path.isdir(file) and file.split('.')[1].lower() in EXTENSIONS:
-			detect_lines(cv2.imread(file))
-		else:
-			print('Error: unsupported input: ' + str(file))
-
