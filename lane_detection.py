@@ -130,6 +130,79 @@ def find_histogram_maxima(histogram):
 	return (left, right)
 
 
+def points_on_lines(warped, strip_size=50):
+	'''
+	Performs binary thresholding on the specified image, then scans horizontal
+	strips to find where the lane markings are. Returns a pair of arrays of
+	points, one for each line. They may not be the same length if one line
+	couldn't be found in a given strip.
+	'''
+	gray = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
+	# TODO(hknepshield) blur first?
+	(thresh_num, thresholded) = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+	# For debugging...
+	#show_with_axes('Thresholded', thresholded)
+	left_points = []
+	right_points = []
+	for strip_end in range(thresholded.shape[0], 0, -strip_size):
+		strip_begin = max(strip_end - strip_size, 0)
+		mask = np.zeros(thresholded.shape[:2], dtype=np.uint8)
+		mask[strip_begin:strip_end, :] = 255
+		hist = binary_histogram(thresholded, mask)
+		(lmax, rmax) = find_histogram_maxima(hist)
+		# More debugging...
+		'''
+		plt.plot(hist)
+		plt.title('Histogram for strip ({}, {})'.format(strip_begin, strip_end))
+		plt.show()
+		'''
+		if lmax is not None:
+			point = (lmax, int((strip_begin + strip_end)/2))
+			left_points.append(point)
+		if rmax is not None:
+			point = (rmax, int((strip_begin + strip_end)/2))
+			right_points.append(point)
+	return (np.array(left_points, dtype=np.int32), np.array(right_points, dtype=np.int32))
+
+
+def interpolate_bottom_of_lines(lines, bottom_row):
+	'''
+	Since points on the lines are marked on the warped image, there will be a
+	large gap when warping back. It's generally safe to assume that lines
+	directly in front of the car are more or less straight. Takes a tuple of
+	(left_points, right_points) for simple wrapping around points_on_lines().
+	'''
+	(left_points, right_points) = lines
+	# Interpolate using quadratics; any curvier would be alarmingly weird.
+	# TODO(hknepshield) consider using just the closer half of the points and
+	# fit a line instead of a quadratic.
+	left_line = np.polyfit(left_points[:, 1], left_points[:, 0], 2)
+	left_points = np.insert(left_points, 0, np.array([np.polyval(left_line, bottom_row), bottom_row], dtype=left_points.dtype), axis=0)
+	right_line = np.polyfit(right_points[:, 1], right_points[:, 0], 2)
+	right_points = np.insert(right_points, 0, np.array([np.polyval(right_line, bottom_row), bottom_row], dtype=right_points.dtype), axis=0)
+	return (left_points, right_points)
+
+
+def paint_lane(warped, left_points, right_points, alpha=0.25):
+	'''
+	Paints circles on the points supplied for both lines; left as blue, right as
+	red. Paints green lines that were interpolated from the points. Finally,
+	paints between the lines as purple. All painting is done with the specified
+	alpha value. The source image is not modified.
+	'''
+	painted_lane = warped.copy()
+	cv2.polylines(painted_lane, [left_points], False, (0, 255, 0), thickness=5)
+	cv2.polylines(painted_lane, [right_points], False, (0, 255, 0), thickness=5)
+	for left_point in left_points:
+		cv2.circle(painted_lane, tuple(left_point), 1, (255, 0, 0), thickness=10)
+	for right_point in right_points:
+		cv2.circle(painted_lane, tuple(right_point), 1, (0, 0, 255), thickness=10)
+	# Assumes that points are in the correct order (bottom left, up, over, down
+	# to bottom right).
+	cv2.fillConvexPoly(painted_lane, np.concatenate((left_points, right_points[::-1])), (255, 0, 255))
+	return cv2.addWeighted(painted_lane, alpha, warped, 1 - alpha, 0)
+
+
 def detect_lines(image):
 	'''
 	Works with static images. Ideally we can scale to videos easily.
@@ -138,56 +211,13 @@ def detect_lines(image):
 	(warped, trapezoid_points, warp_matrix) = get_birds_eye_view(image)
 	show_with_axes('Warped', warped)
 
-	'''
-	# Change white to green
-	mask = np.logical_and(warped[:,:,0] >= 200, warped[:,:,1] >= 200, warped[:,:,2] >= 200)
-	warped[mask] = (0, 255, 0)
-	'''
+	(left_points, right_points) = interpolate_bottom_of_lines(points_on_lines(warped), warped.shape[0] - 1)
+	# Alternatively, without interpolation to the very bottom...
+	#(left_points, right_points) = points_on_lines(warped)
+	painted = paint_lane(warped, left_points, right_points)
+	show_with_axes('Painted', painted)
 
-	gray = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
-	# TODO(hknepshield) blur first?
-	(thresh_num, thresholded) = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-	show_with_axes('Thresholded', thresholded)
-	# Look at 50 pixel tall strips of the image and find the two lines from the
-	# peaks in the strips' histograms.
-	left_points = []
-	right_points = []
-	strip_size = 50
-	for strip_end in range(thresholded.shape[0], 0, -strip_size):
-		strip_begin = max(strip_end - strip_size, 0)
-		mask = np.zeros(thresholded.shape[:2], dtype=np.uint8)
-		mask[strip_begin:strip_end, :] = 255
-		hist = binary_histogram(thresholded, mask)
-		(lmax, rmax) = find_histogram_maxima(hist)
-		'''
-		plt.plot(hist)
-		plt.title('Histogram for strip ({}, {})'.format(strip_begin, strip_end))
-		plt.show()
-		'''
-		if lmax is not None:
-			point = (lmax, int((strip_begin + strip_end)/2))
-			cv2.circle(warped, point, 1, (255, 0, 0), thickness=8)
-			left_points.append(point)
-		if rmax is not None:
-			point = (rmax, int((strip_begin + strip_end)/2))
-			cv2.circle(warped, point, 1, (0, 0, 255), thickness=8)
-			right_points.append(point)
-	# Interpolate to the bottom of the image, since un-warping as-is causes a
-	# pretty large gap from the bottom to the first point.
-	bottom_row = thresholded.shape[0] - 1
-	left_points = np.array(left_points, dtype=np.int32)
-	left_line = np.polyfit(left_points[:, 1], left_points[:, 0], 2) # Quadratic
-	left_interp = np.polyval(left_line, bottom_row)
-	left_points = np.insert(left_points, 0, np.array([left_interp, bottom_row], dtype=left_points.dtype), axis=0)
-	right_points = np.array(right_points, dtype=np.int32)
-	right_line = np.polyfit(right_points[:, 1], right_points[:, 0], 2)
-	right_interp = np.polyval(right_line, bottom_row)
-	right_points = np.insert(right_points, 0, np.array([right_interp, bottom_row], dtype=right_points.dtype), axis=0)
-	cv2.polylines(warped, [left_points], False, (0, 255, 0), thickness=5)
-	cv2.polylines(warped, [right_points], False, (0, 255, 0), thickness=5)
-	show_with_axes('Lines', warped)
-
-	undone = get_original_view(warped, warp_matrix, image.shape)
+	undone = get_original_view(painted, warp_matrix, image.shape)
 	show_with_axes('Undone', undone)
 
 	superimposed = superimpose(image, undone, trapezoid_points)
