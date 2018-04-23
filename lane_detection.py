@@ -105,19 +105,12 @@ def superimpose(original, modified, anchors):
 def binary_histogram(binary_image, mask=None):
 	'''
 	Scans horizontally across a binary image and returns a histogram of pixel
-	count against the column.
+	count against the column index. Gives an idea of horizontal location of lane
+	markings.
 	'''
-	# TODO(hknepshield) fairly slow - speed up with some fancy np calls?
-	histogram = np.zeros(binary_image.shape[1], dtype=np.uint32)
-	for row in range(binary_image.shape[0]):
-		if mask is not None and np.all(mask[row, :] == 0):
-			continue
-		for col in range(binary_image.shape[1]):
-			if mask is not None and mask[row, col] == 0:
-				continue
-			if binary_image[row, col] != 0:
-				histogram[col] += 1
-	return histogram
+	masked = np.bitwise_and(binary_image, mask) if mask is not None else binary_image
+	masked[masked > 0] = 1
+	return np.sum(masked, axis=0) # Sum along columns
 
 
 def find_histogram_maxima(histogram):
@@ -166,11 +159,11 @@ def detect_lines(image):
 		mask[strip_begin:strip_end, :] = 255
 		hist = binary_histogram(thresholded, mask)
 		(lmax, rmax) = find_histogram_maxima(hist)
-		#'''
+		'''
 		plt.plot(hist)
 		plt.title('Histogram for strip ({}, {})'.format(strip_begin, strip_end))
 		plt.show()
-		#'''
+		'''
 		if lmax is not None:
 			point = (lmax, int((strip_begin + strip_end)/2))
 			cv2.circle(warped, point, 1, (255, 0, 0), thickness=8)
