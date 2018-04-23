@@ -45,19 +45,17 @@ def select_trapezoid(image):
 	#'''
 
 	# Strange ordering, but cv2-imposed.
-	points = np.array([top_left, top_right, bottom_left, bottom_right], dtype=np.float32)
+	points = np.array([top_left, top_right, bottom_right, bottom_left], dtype=np.float32)
 	width = bottom_right[0] - bottom_left[0]
 	height = bottom_left[1] - top_left[1]
-	new_perspective = np.array([(0, 0), (width, 0), (0, height), (width, height)], dtype=np.float32)
+	new_perspective = np.array([(0, 0), (width, 0), (width, height), (0, height)], dtype=np.float32)
 
 	perspective_matrix = cv2.getPerspectiveTransform(points, new_perspective)
-	print(perspective_matrix)
 	warped = cv2.warpPerspective(image, perspective_matrix, (width, height))
 	show_with_axes('Warped', warped)
 
 	# Warp back
 	undo_matrix = cv2.getPerspectiveTransform(new_perspective, points)
-	print(undo_matrix)
 	undone = cv2.warpPerspective(warped, undo_matrix, (cols, rows))
 	show_with_axes('Undone', undone)
 
@@ -65,10 +63,10 @@ def select_trapezoid(image):
 	mask = np.logical_and(undone[:,:,0] >= 200, undone[:,:,1] >= 200, undone[:,:,2] >= 200)
 	undone[mask] = (0, 255, 0)
 	show_with_axes('Changed', undone)
-	# TODO(hknepshield) is there an actual bounding box mask? We want the trapezoid back
-	replacement_region = np.logical_or(undone[:,:,0] > 25, undone[:,:,1] > 25, undone[:,:,2] > 25)
-	rr = np.repeat(replacement_region[:,:,np.newaxis], 3, axis=2)
-	np.putmask(image, rr, undone)
+	replacement_region = np.zeros(undone.shape, dtype=np.uint8)
+	cv2.fillConvexPoly(replacement_region, points.astype(np.int32), (255,)*image.shape[2])
+	show_with_axes('Replacement mask', replacement_region)
+	np.putmask(image, replacement_region, undone)
 	# TODO(hknepshield) minor tearing occurring here - close in the bounding box slightly?
 	show_with_axes('Superimposed', image)
 
