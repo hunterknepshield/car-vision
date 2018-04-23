@@ -203,25 +203,31 @@ def paint_lane(warped, left_points, right_points, alpha=0.25):
 	return cv2.addWeighted(painted_lane, alpha, warped, 1 - alpha, 0)
 
 
-def detect_lines(image):
+def detect_lines(image, debug=False):
 	'''
 	Works with static images. Ideally we can scale to videos easily.
 	'''
-	show_with_axes('Original', image)
+	if debug:
+		show_with_axes('Original', image)
 	(warped, trapezoid_points, warp_matrix) = get_birds_eye_view(image)
-	show_with_axes('Warped', warped)
+	if debug:
+		show_with_axes('Warped', warped)
 
 	(left_points, right_points) = interpolate_bottom_of_lines(points_on_lines(warped), warped.shape[0] - 1)
 	# Alternatively, without interpolation to the very bottom...
 	#(left_points, right_points) = points_on_lines(warped)
 	painted = paint_lane(warped, left_points, right_points)
-	show_with_axes('Painted', painted)
+	if debug:
+		show_with_axes('Painted', painted)
 
 	undone = get_original_view(painted, warp_matrix, image.shape)
-	show_with_axes('Undone', undone)
+	if debug:
+		show_with_axes('Undone', undone)
 
 	superimposed = superimpose(image, undone, trapezoid_points)
-	show_with_axes('Superimposed', superimposed)
+	if debug:
+		show_with_axes('Superimposed', superimposed)
+	return superimposed
 
 
 def cannyedge(image, lowerbound, upperbound):
