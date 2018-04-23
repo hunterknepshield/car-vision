@@ -33,6 +33,7 @@ def select_trapezoid(image):
 	bottom_right = (int(cols*.9), int(rows))
 	top_left = (int(cols*.45), int(rows*.6))
 	top_right = (int(cols*.55), int(rows*.6))
+	show_with_axes('Original', image)
 
 	# For debugging purposes...
 	'''
@@ -44,7 +45,7 @@ def select_trapezoid(image):
 	show_with_axes('Lines', lines)
 	#'''
 
-	# Strange ordering, but cv2-imposed.
+	# The ordering of `points` and `new_perspective` must match.
 	points = np.array([top_left, top_right, bottom_right, bottom_left], dtype=np.float32)
 	width = bottom_right[0] - bottom_left[0]
 	height = bottom_left[1] - top_left[1]
@@ -59,15 +60,24 @@ def select_trapezoid(image):
 	undone = cv2.warpPerspective(warped, undo_matrix, (cols, rows))
 	show_with_axes('Undone', undone)
 
-	# Change white to green then superimpose
+	# Change white to green
 	mask = np.logical_and(undone[:,:,0] >= 200, undone[:,:,1] >= 200, undone[:,:,2] >= 200)
 	undone[mask] = (0, 255, 0)
 	show_with_axes('Changed', undone)
-	replacement_region = np.zeros(undone.shape, dtype=np.uint8)
-	cv2.fillConvexPoly(replacement_region, points.astype(np.int32), (255,)*image.shape[2])
-	show_with_axes('Replacement mask', replacement_region)
-	np.putmask(image, replacement_region, undone)
-	# TODO(hknepshield) minor tearing occurring here - close in the bounding box slightly?
+
+	# Superimpose the changed version on the original, cropping in slightly to
+	# prevent tearing.
+	replacement_anchors = points.copy()
+	replacement_anchors[0:2, 1] += 1 # Move top
+	replacement_anchors[1:3, 0] -= 1 # Move right
+	replacement_anchors[2:4, 1] += 1 # Move bottom
+	replacement_anchors[3, 0] += 1 # Move left
+	replacement_anchors[0, 0] += 1 # Left again, slicing syntax can't do -1:1
+	replacement_mask = np.zeros(undone.shape, dtype=np.uint8)
+	# Fill the region with white with the same depth as the original image.
+	cv2.fillConvexPoly(replacement_mask, replacement_anchors.astype(np.int32), (255,)*image.shape[2])
+	show_with_axes('Replacement mask', replacement_mask)
+	np.putmask(image, replacement_mask, undone)
 	show_with_axes('Superimposed', image)
 
 
