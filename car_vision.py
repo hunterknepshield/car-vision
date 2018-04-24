@@ -18,7 +18,7 @@ EXTENSIONS = set(['jpg','jpeg','jif','jfif','jp2','j2k','j2c','fpx','tif', \
 VIDEO_EXTENSIONS = set(['mp4'])
 
 
-def perceive_road(file):
+def perceive_road(file, debug=False):
 	'''
 	Handles lane and vehicle detection then determines course of action
 	@params:
@@ -26,7 +26,11 @@ def perceive_road(file):
 	@returns:
 		TBD
 	'''
-	detect_lines(cv2.imread(file), True)
+	painted = detect_lines(cv2.imread(file), debug)
+	cv2.imshow('Painted', painted)
+	cv2.waitKey(0)
+	cv2.destroyAllWindows()
+	cv2.waitKey(1)
 	#detect_vehicles()
 
 
@@ -60,7 +64,8 @@ if __name__ == '__main__':
 		if os.path.isdir(file):
 			print('Error: cannot supply directory - ' + str(file))
 		elif ext in EXTENSIONS:
-			perceive_road(file)
+			# Debug only if there's a single image
+			perceive_road(file, len(sys.argv) == 2)
 		elif ext in VIDEO_EXTENSIONS:
 			perceive_road_video(file)
 		else:
