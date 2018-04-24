@@ -113,19 +113,21 @@ def binary_histogram(binary_image, mask=None):
 	return np.sum(masked, axis=0) # Sum along columns
 
 
-def find_histogram_maxima(histogram):
+def find_histogram_maxima(histogram, threshold=5):
 	'''
 	Returns a pair (of which one or both may be None) of column numbers that
 	have local maxima. Exactly divides the histogram in half and searches on
 	either side of the dividing line. This fits the assumption that lanes will
-	never cross over to the other side.
+	never cross over to the other side. The threshold is inclusive, so if the
+	histogram hits a point at or above the threshold, it is considered to be a
+	maximum.
 	'''
 	half = int(histogram.shape[0]/2)
 	left = np.argmax(histogram[:half])
-	if histogram[left] == 0:
+	if histogram[left] < threshold:
 		left = None
 	right = np.argmax(histogram[half:]) + half
-	if histogram[right] == 0:
+	if histogram[right] < threshold:
 		right = None
 	return (left, right)
 
@@ -151,11 +153,15 @@ def points_on_lines(warped, strip_size=50):
 		hist = binary_histogram(thresholded, mask)
 		(lmax, rmax) = find_histogram_maxima(hist)
 		# More debugging...
-		'''
+		#'''
+		plt.subplot(211)
+		plt.imshow(np.bitwise_and(thresholded, mask), cmap='gray')
+		plt.subplot(212)
 		plt.plot(hist)
+		plt.xlim([0, thresholded.shape[1]]) # Kill margins so it lines up nicely
 		plt.title('Histogram for strip ({}, {})'.format(strip_begin, strip_end))
 		plt.show()
-		'''
+		#'''
 		if lmax is not None:
 			point = (lmax, int((strip_begin + strip_end)/2))
 			left_points.append(point)
