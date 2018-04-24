@@ -26,7 +26,7 @@ def perceive_road(file):
     @returns:
         TBD
     '''
-    road,lane = detect_lines(cv2.imread(file), True)
+    road,lane = detect_lines(cv2.imread(file))
     detect_vehicles(road,lane)
 
 
