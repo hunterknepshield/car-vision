@@ -113,21 +113,26 @@ def strip_threshold_and_histogram(gray, strip_begin, strip_end, debug=False):
 	(thresh_num, thresholded) = cv2.threshold(masked, 0, 1, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 	hist = np.sum(thresholded, axis=0) # Sum along columns
 	if debug:
+		# Draws the dividing line between the halves of the strip as well.
+		midpoint = int(masked.shape[1]/2)
 		plt.subplot(311)
 		plt.imshow(masked, cmap='gray')
-		plt.title('Strip')
+		plt.axvline(x=midpoint, color='r')
+		plt.title('Strip {} to {}'.format(strip_begin, strip_end))
 		plt.subplot(312)
 		plt.imshow(thresholded, cmap='gray')
+		plt.axvline(x=midpoint, color='r')
 		plt.title('Thresholded')
 		plt.subplot(313)
 		plt.plot(hist)
+		plt.axvline(x=midpoint, color='r')
 		plt.xlim([0, thresholded.shape[1]]) # Kill margins so it lines up nicely
 		plt.title('Histogram')
 		plt.show()
 	return hist
 
 
-def find_histogram_maxima(histogram, threshold=5):
+def find_histogram_maxima(histogram, threshold=8):
 	'''
 	Returns a pair (of which one or both may be None) of column numbers that
 	have local maxima. Exactly divides the histogram in half and searches on
@@ -146,7 +151,7 @@ def find_histogram_maxima(histogram, threshold=5):
 	return (left, right)
 
 
-def points_on_lines(warped, strip_size=50, debug=False):
+def points_on_lines(warped, strip_size=50, hood_size=10, debug=False):
 	'''
 	Performs binary thresholding on the specified image, then scans horizontal
 	strips to find where the lane markings are. Returns a pair of arrays of
@@ -156,10 +161,11 @@ def points_on_lines(warped, strip_size=50, debug=False):
 	gray = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
 	left_points = []
 	right_points = []
+	bottom_row = gray.shape[0] - hood_size
 	# We care more about finer accuracy at the bottom of the image, so we put
 	# the potential partial strip down there.
-	for strip_begin in range(0, gray.shape[0], strip_size):
-		strip_end = min(strip_begin + strip_size, gray.shape[0])
+	for strip_begin in range(0, bottom_row, strip_size):
+		strip_end = min(strip_begin + strip_size, bottom_row)
 		hist = strip_threshold_and_histogram(gray, strip_begin, strip_end, debug)
 		(lmax, rmax) = find_histogram_maxima(hist)
 		if lmax is not None:
@@ -171,22 +177,24 @@ def points_on_lines(warped, strip_size=50, debug=False):
 	return (np.array(left_points, dtype=np.int32), np.array(right_points, dtype=np.int32))
 
 
-def interpolate_bottom_of_lines(lines, bottom_row):
+def interpolate_bottom_of_lines(lines, bottom_row, polynomial_degree=1):
 	'''
 	Since points on the lines are marked on the warped image, there will be a
-	large gap when warping back. It's generally safe to assume that lines
-	directly in front of the car are more or less straight. Takes a tuple of
-	(left_points, right_points) for simple wrapping around points_on_lines().
+	large gap at the bottom when warping back without interpolating all the way
+	to the bottom. Takes a tuple of (left_points, right_points) for simple
+	wrapping around points_on_lines().
 	'''
 	(left_points, right_points) = lines
-	# Interpolate using quadratics; any curvier would be alarmingly weird.
-	# TODO(hknepshield) consider using just the closer half of the points and
-	# fit a line instead of a quadratic.
+	# It's more or less safe to assume that points closer to the car are more
+	# likely to fit a straighter line.
+	closeness_cutoff = bottom_row/2
 	if len(left_points) > 0:
-		left_line = np.polyfit(left_points[:, 1], left_points[:, 0], 2)
+		left_cutoff = np.argmax(left_points[:, 1] > closeness_cutoff)
+		left_line = np.polyfit(left_points[left_cutoff:, 1], left_points[left_cutoff:, 0], polynomial_degree)
 		left_points = np.append(left_points, np.array([[np.polyval(left_line, bottom_row), bottom_row]], dtype=left_points.dtype), axis=0)
 	if len(right_points) > 0:
-		right_line = np.polyfit(right_points[:, 1], right_points[:, 0], 2)
+		right_cutoff = np.argmax(right_points[:, 1] > closeness_cutoff)
+		right_line = np.polyfit(right_points[right_cutoff:, 1], right_points[right_cutoff:, 0], polynomial_degree)
 		right_points = np.append(right_points, np.array([[np.polyval(right_line, bottom_row), bottom_row]], dtype=right_points.dtype), axis=0)
 	return (left_points, right_points)
 
