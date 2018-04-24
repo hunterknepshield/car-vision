@@ -131,7 +131,7 @@ def decipher_car(road, cascade):
 
 
 
-def object_ahead(lane,road):
+def object_ahead(road):
     '''
     Determine whether or not there is an object or vehicle ahead on the projected path
     @params:
@@ -187,14 +187,15 @@ def collate_velocity():
     #TODO Research, gameplan, implement
 
 
-def detect_vehicles(lane,road):
+def detect_vehicles(road,lane):
     '''
     Detect vehicles
     @params:
+        road: image of the entire road ahead
         lane: segmented lane image of projected path
     @returns:
         TBD
     '''
     print('Initiating vehicle detection...')
-    if object_ahead(lane,road):
+    if object_ahead(road):
         calc_distance()

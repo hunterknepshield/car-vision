@@ -14,17 +14,37 @@ EXTENSIONS = set(['jpg','jpeg','jif','jfif','jp2','j2k','j2c','fpx','tif', \
 		  'tiff','pcd','png','ppm','webp','bmp','bpg','dib','wav', \
 		  'cgm','svg'])
 
+# Set of supported video formats
+VIDEO_EXTENSIONS = set(['mp4'])
+
 
 def perceive_road(file):
     '''
     Handles lane and vehicle detection then determines course of action
     @params:
-        file: input image(s) of road
+        file: input image of road
     @returns:
         TBD
     '''
-    lane,path,full = detect_lines(cv2.imread(file))
-    detect_vehicles(path,full)
+    road,lane = detect_lines(cv2.imread(file), True)
+    detect_vehicles(road,lane)
+
+
+def perceive_road_video(file):
+	'''
+	A quick wrapper around lane detection for a video file. See above.
+	'''
+	cap = cv2.VideoCapture(file)
+	while cap.isOpened():
+		(ret, frame) = cap.read()
+		painted = detect_lines(frame, False) # Don't stop stuff with show calls
+		cv2.imshow('Frame', painted)
+		# 25 ms is suggested for smooth video playback
+		if cv2.waitKey(25) & 0xFF == ord('q'):
+			break
+	cap.release()
+	cv2.destroyAllWindows()
+	cv2.waitKey(1)
 
 
 if __name__ == '__main__':
@@ -36,7 +56,12 @@ if __name__ == '__main__':
         sys.exit()
 
     for file in sys.argv[1:]:
-        if not os.path.isdir(file) and file.split('.')[1].lower() in EXTENSIONS:
-            perceive_road(file)
-        else:
-            print('Error: unsupported input - ' + str(file))
+		ext = file.split('.')[1].lower()
+		if os.path.isdir(file):
+			print('Error: cannot supply directory - ' + str(file))
+		elif ext in EXTENSIONS:
+			perceive_road(file)
+		elif ext in VIDEO_EXTENSIONS:
+			perceive_road_video(file)
+		else:
+			print('Error: unsupported input - ' + str(file))
