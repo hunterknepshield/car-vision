@@ -230,8 +230,8 @@ def detect_lines(image, debug=False):
 	superimposed = superimpose(image, undone, trapezoid_points)
 	if debug:
 		show_with_axes('Superimposed', superimposed)
-	#return superimposed TODO(rjswitzer3) - Determine what needs to be returned
-	return [image, undone]
+	return superimposed
+
 
 def cannyedge(image, lowerbound, upperbound):
 	'''
