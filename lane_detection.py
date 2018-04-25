@@ -144,16 +144,15 @@ def find_histogram_maximum(histogram, left_threshold, right_threshold, vertical_
 	'''
 	max_index = np.argmax(histogram)
 	max_value = histogram[max_index]
+	'''
 	if debug:
-		'''
-		In order to have a non-None return value, the plot must:
-		- Have the horizontal red line above the magenta line,
-		- Have both yellow lines visible,
-		- Have no points above the magenta line as well as to the right of the
-			cyan line (if it exists), and
-		- Have no points above the magenta line as well as to the left of the
-			green line (if it exists).
-		'''
+		# In order to have a non-None return value, the plot must:
+		# - Have the horizontal red line above the magenta line,
+		# - Have both yellow lines visible,
+		# - Have no points above the magenta line as well as to the right of the
+		#   	cyan line (if it exists), and
+		# - Have no points above the magenta line as well as to the left of the
+		#   	green line (if it exists).
 		plt.plot(histogram)
 		plt.axhline(y=max_value, color='r')
 		plt.axvline(x=max_index, color='r')
@@ -169,6 +168,7 @@ def find_histogram_maximum(histogram, left_threshold, right_threshold, vertical_
 			if max_index + right_threshold < len(histogram):
 				plt.axvline(x=max_index + right_threshold, color='g')
 		plt.show()
+	#'''
 	if max_value < vertical_threshold:
 		# Max is too small
 		return None
@@ -242,25 +242,32 @@ def interpolate_bottom_of_lines(lines, bottom_row, polynomial_degree=1):
 	Since points on the lines are marked on the warped image, there will be a
 	large gap at the bottom when warping back without interpolating all the way
 	to the bottom. Takes a tuple of (left_points, right_points) for simple
-	wrapping around points_on_lines().
+	wrapping around points_on_lines(). Only interpolates if both lines have
+	enough points close to the bottom of the image.
 	'''
 	(left_points, right_points) = lines
 	# It's more or less safe to assume that points closer to the car are more
 	# likely to fit a straighter line.
-	closeness_cutoff = bottom_row/2
+	closeness_cutoff = bottom_row//3
+	(left_interp, right_interp) = (None, None) # Only interpolate both at once
 	# Argmax blows up on empty lists
 	if len(left_points) > 0:
 		left_cutoff = np.argmax(left_points[:, 1] > closeness_cutoff)
 		# Need at least 2 points to interpolate
 		if len(left_points) - left_cutoff > 1:
 			left_line = np.polyfit(left_points[left_cutoff:, 1], left_points[left_cutoff:, 0], polynomial_degree)
-			left_points = np.append(left_points, np.array([[np.polyval(left_line, bottom_row), bottom_row]], dtype=left_points.dtype), axis=0)
+			left_interp = np.array([[np.polyval(left_line, bottom_row), bottom_row]], dtype=left_points.dtype)
 	if len(right_points) > 0:
 		right_cutoff = np.argmax(right_points[:, 1] > closeness_cutoff)
 		# Need at least 2 points to interpolate
 		if len(right_points) - right_cutoff > 1:
 			right_line = np.polyfit(right_points[right_cutoff:, 1], right_points[right_cutoff:, 0], polynomial_degree)
-			right_points = np.append(right_points, np.array([[np.polyval(right_line, bottom_row), bottom_row]], dtype=right_points.dtype), axis=0)
+			right_interp = np.array([[np.polyval(right_line, bottom_row), bottom_row]], dtype=right_points.dtype)
+	if left_interp is not None and right_interp is not None:
+		# Only interpolate when both lines can be interpolated, otherwise we get
+		# awkward trapezoid-like shapes that look worse than the original.
+		left_points = np.append(left_points, left_interp, axis=0)
+		right_points = np.append(right_points, right_interp, axis=0)
 	return (left_points, right_points)
 
 
