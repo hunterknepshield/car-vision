@@ -164,7 +164,6 @@ def object_ahead(road,lane):
         return [False,lane]
 
 
-
 def calc_distance():
     '''
     Calculate the distance to the object ahead and cache it (or return? - TBD)
@@ -198,13 +197,10 @@ def detect_vehicles(road,lane,video=False):
     @returns:
         TBD
     '''
-    print('Initiating vehicle detection...')
-
     if video:
         detected,lane = object_ahead(road,lane)
         return lane
     else:
         detected,lane = object_ahead(road,lane)
-        show('ROI',lane)
         if detected:
             calc_distance()

@@ -102,35 +102,113 @@ def superimpose(original, modified, anchors):
 	return superimposed
 
 
-def binary_histogram(binary_image, mask=None):
+def strip_threshold_and_histogram(gray, strip_begin, strip_end, debug=False):
 	'''
 	Scans horizontally across a binary image and returns a histogram of pixel
-	count against the column index. Gives an idea of horizontal location of lane
-	markings.
+	count against the column index after thresholding it. Gives an idea of
+	horizontal location of lane markings.
 	'''
-	masked = np.bitwise_and(binary_image, mask) if mask is not None else binary_image
-	masked[masked > 0] = 1
-	return np.sum(masked, axis=0) # Sum along columns
+	masked = gray[strip_begin:strip_end, :]
+	# TODO(hknepshield) blur first?
+	(thresh_num, thresholded) = cv2.threshold(masked, 0, 1, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+	hist = np.sum(thresholded, axis=0) # Sum along columns
+	if debug:
+		# Draws the dividing line between the halves of the strip as well.
+		midpoint = masked.shape[1]//2
+		plt.subplot(311)
+		plt.imshow(masked, cmap='gray')
+		plt.axvline(x=midpoint, color='r')
+		plt.title('Strip {} to {}'.format(strip_begin, strip_end))
+		plt.subplot(312)
+		plt.imshow(thresholded, cmap='gray')
+		plt.axvline(x=midpoint, color='r')
+		plt.title('Thresholded')
+		plt.subplot(313)
+		plt.plot(hist)
+		plt.axvline(x=midpoint, color='r')
+		plt.xlim([0, thresholded.shape[1]]) # Kill margins so it lines up nicely
+		plt.title('Histogram')
+		plt.show()
+	return hist
 
 
-def find_histogram_maxima(histogram):
+DEFAULT_HORIZONTAL_THRESHOLD=50
+
+def find_histogram_maximum(histogram, left_threshold, right_threshold, vertical_threshold=5, debug=False):
 	'''
-	Returns a pair (of which one or both may be None) of column numbers that
-	have local maxima. Exactly divides the histogram in half and searches on
-	either side of the dividing line. This fits the assumption that lanes will
-	never cross over to the other side.
+	Finds the index of the maximum value of the supplied histogram. There are
+	several conditions to make sure the histogram is roughly unimodal (e.g. the
+	histogram should be one half of the lane, not the full lane). For a visual
+	representation of what this means, pass debug=True. Returns None if there
+	isn't a high-confidence unimodal maximum value.
 	'''
-	half = int(histogram.shape[0]/2)
-	left = np.argmax(histogram[:half])
-	if histogram[left] == 0:
-		left = None
-	right = np.argmax(histogram[half:]) + half
-	if histogram[right] == 0:
-		right = None
-	return (left, right)
+	max_index = np.argmax(histogram)
+	max_value = histogram[max_index]
+	'''
+	if debug:
+		# In order to have a non-None return value, the plot must:
+		# - Have the horizontal red line above the magenta line,
+		# - Have both yellow lines visible,
+		# - Have no points above the magenta line as well as to the right of the
+		#   	cyan line (if it exists), and
+		# - Have no points above the magenta line as well as to the left of the
+		#   	green line (if it exists).
+		plt.plot(histogram)
+		plt.axhline(y=max_value, color='r')
+		plt.axvline(x=max_index, color='r')
+		plt.axhline(y=vertical_threshold, color='k')
+		if max_value - vertical_threshold >= 0:
+			plt.axhline(y=max_value - vertical_threshold, color='m')
+		if max_index - left_threshold//2 > 0:
+			plt.axvline(x=max_index - left_threshold//2, color='y')
+			if max_index - left_threshold >= 0:
+				plt.axvline(x=max_index - left_threshold, color='c')
+		if max_index + right_threshold//2 < len(histogram) - 1:
+			plt.axvline(x=max_index + right_threshold//2, color='y')
+			if max_index + right_threshold < len(histogram):
+				plt.axvline(x=max_index + right_threshold, color='g')
+		plt.show()
+	#'''
+	if max_value < vertical_threshold:
+		# Max is too small
+		return None
+	points_near_max = histogram > max_value - vertical_threshold
+	# Ensure that there are no points larger than (max - vertical_threshold)
+	# further away than horizontal_threshold from max_index
+	if max_index - left_threshold//2 > 0:
+		if np.any(points_near_max[:max(max_index - left_threshold, 0)]):
+			# There are points above (max_value - vertical_threshold) too far
+			# away from the max
+			return None
+	else:
+		# The max is too close to the left end of the range
+		return None
+	if max_index + right_threshold//2 < len(histogram) - 1:
+		if np.any(points_near_max[min(max_index + right_threshold + 1, len(histogram)):]):
+			# There are points above (max_value - vertical_threshold) too far
+			# away from the max
+			return None
+	else:
+		# The max is too close to the right end of the range
+		return None
+	return max_index
+
+def find_left_histogram_maximum(histogram, scale=1.15, horizontal_threshold=DEFAULT_HORIZONTAL_THRESHOLD, **kwargs):
+	'''
+	The left side of a lane will have convergence towards the right, so slightly
+	stretch the right threshold more than normal.
+	'''
+	return find_histogram_maximum(histogram, horizontal_threshold, int(horizontal_threshold*scale), **kwargs)
+
+def find_right_histogram_maximum(histogram, scale=1.15, horizontal_threshold=DEFAULT_HORIZONTAL_THRESHOLD, **kwargs):
+	'''
+	The right side of a lane will have convergence towards the left, so slightly
+	stretch the left threshold more than normal.
+	'''
+	return find_histogram_maximum(histogram, int(horizontal_threshold*scale), horizontal_threshold, **kwargs)
 
 
-def points_on_lines(warped, strip_size=50):
+def points_on_lines(warped, strip_size=50, hood_size=10, debug=False):
 	'''
 	Performs binary thresholding on the specified image, then scans horizontal
 	strips to find where the lane markings are. Returns a pair of arrays of
@@ -138,68 +216,85 @@ def points_on_lines(warped, strip_size=50):
 	couldn't be found in a given strip.
 	'''
 	gray = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
-	# TODO(hknepshield) blur first?
-	(thresh_num, thresholded) = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-	# For debugging...
-	#show_with_axes('Thresholded', thresholded)
 	left_points = []
 	right_points = []
-	for strip_end in range(thresholded.shape[0], 0, -strip_size):
-		strip_begin = max(strip_end - strip_size, 0)
-		mask = np.zeros(thresholded.shape[:2], dtype=np.uint8)
-		mask[strip_begin:strip_end, :] = 255
-		hist = binary_histogram(thresholded, mask)
-		(lmax, rmax) = find_histogram_maxima(hist)
-		# More debugging...
-		'''
-		plt.plot(hist)
-		plt.title('Histogram for strip ({}, {})'.format(strip_begin, strip_end))
-		plt.show()
-		'''
+	bottom_row = gray.shape[0] - hood_size
+	# We care more about finer accuracy at the bottom of the image, so we put
+	# the potential partial strip down there.
+	for strip_begin in range(0, bottom_row, strip_size):
+		strip_end = min(strip_begin + strip_size, bottom_row)
+		hist = strip_threshold_and_histogram(gray, strip_begin, strip_end, debug)
+		half = len(hist)//2
+		lmax = find_left_histogram_maximum(hist[:half], debug=debug)
+		rmax = find_right_histogram_maximum(hist[half:], debug=debug) # Offset!
 		if lmax is not None:
-			point = (lmax, int((strip_begin + strip_end)/2))
+			point = (lmax, (strip_begin + strip_end)//2)
 			left_points.append(point)
 		if rmax is not None:
-			point = (rmax, int((strip_begin + strip_end)/2))
+			rmax += half # No cute way to inline this correction
+			point = (rmax, (strip_begin + strip_end)//2)
 			right_points.append(point)
 	return (np.array(left_points, dtype=np.int32), np.array(right_points, dtype=np.int32))
 
 
-def interpolate_bottom_of_lines(lines, bottom_row):
+def interpolate_bottom_of_lines(lines, bottom_row, polynomial_degree=1):
 	'''
 	Since points on the lines are marked on the warped image, there will be a
-	large gap when warping back. It's generally safe to assume that lines
-	directly in front of the car are more or less straight. Takes a tuple of
-	(left_points, right_points) for simple wrapping around points_on_lines().
+	large gap at the bottom when warping back without interpolating all the way
+	to the bottom. Takes a tuple of (left_points, right_points) for simple
+	wrapping around points_on_lines(). Only interpolates if both lines have
+	enough points close to the bottom of the image.
 	'''
 	(left_points, right_points) = lines
-	# Interpolate using quadratics; any curvier would be alarmingly weird.
-	# TODO(hknepshield) consider using just the closer half of the points and
-	# fit a line instead of a quadratic.
-	left_line = np.polyfit(left_points[:, 1], left_points[:, 0], 2)
-	left_points = np.insert(left_points, 0, np.array([np.polyval(left_line, bottom_row), bottom_row], dtype=left_points.dtype), axis=0)
-	right_line = np.polyfit(right_points[:, 1], right_points[:, 0], 2)
-	right_points = np.insert(right_points, 0, np.array([np.polyval(right_line, bottom_row), bottom_row], dtype=right_points.dtype), axis=0)
+	# It's more or less safe to assume that points closer to the car are more
+	# likely to fit a straighter line.
+	closeness_cutoff = bottom_row//3
+	(left_interp, right_interp) = (None, None) # Only interpolate both at once
+	# Argmax blows up on empty lists
+	if len(left_points) > 0:
+		left_cutoff = np.argmax(left_points[:, 1] > closeness_cutoff)
+		# Need at least 2 points to interpolate
+		if len(left_points) - left_cutoff > 1:
+			left_line = np.polyfit(left_points[left_cutoff:, 1], left_points[left_cutoff:, 0], polynomial_degree)
+			left_interp = np.array([[np.polyval(left_line, bottom_row), bottom_row]], dtype=left_points.dtype)
+	if len(right_points) > 0:
+		right_cutoff = np.argmax(right_points[:, 1] > closeness_cutoff)
+		# Need at least 2 points to interpolate
+		if len(right_points) - right_cutoff > 1:
+			right_line = np.polyfit(right_points[right_cutoff:, 1], right_points[right_cutoff:, 0], polynomial_degree)
+			right_interp = np.array([[np.polyval(right_line, bottom_row), bottom_row]], dtype=right_points.dtype)
+	if left_interp is not None and right_interp is not None:
+		# Only interpolate when both lines can be interpolated, otherwise we get
+		# awkward trapezoid-like shapes that look worse than the original.
+		left_points = np.append(left_points, left_interp, axis=0)
+		right_points = np.append(right_points, right_interp, axis=0)
 	return (left_points, right_points)
 
 
 def paint_lane(warped, left_points, right_points, alpha=0.25):
 	'''
-	Paints circles on the points supplied for both lines; left as blue, right as
-	red. Paints green lines that were interpolated from the points. Finally,
-	paints between the lines as purple. All painting is done with the specified
-	alpha value. The source image is not modified.
+	Paints circles on the points supplied for both lines, the interpolated
+	lines, and the interpolated lane area. All painting is done with the
+	specified alpha value. The source image is not modified.
 	'''
 	painted_lane = warped.copy()
-	cv2.polylines(painted_lane, [left_points], False, (0, 255, 0), thickness=5)
-	cv2.polylines(painted_lane, [right_points], False, (0, 255, 0), thickness=5)
+	if len(left_points) == 0 and len(right_points) == 0:
+		# Nothing to draw
+		return painted_lane
+	if len(left_points) > 1:
+		# Need 2 or more points to draw a line
+		cv2.polylines(painted_lane, [left_points], False, (255, 0, 255), thickness=5)
+	if len(right_points) > 1:
+		# Need 2 or more points to draw a line
+		cv2.polylines(painted_lane, [right_points], False, (255, 0, 255), thickness=5)
 	for left_point in left_points:
 		cv2.circle(painted_lane, tuple(left_point), 1, (255, 0, 0), thickness=10)
 	for right_point in right_points:
 		cv2.circle(painted_lane, tuple(right_point), 1, (0, 0, 255), thickness=10)
-	# Assumes that points are in the correct order (bottom left, up, over, down
-	# to bottom right).
-	cv2.fillConvexPoly(painted_lane, np.concatenate((left_points, right_points[::-1])), (255, 0, 255))
+	if len(left_points) != 0 and len(right_points) != 0:
+		# We actually have a polygon to fill. Method assumes that points are in
+		# clockwise order.
+		cv2.fillConvexPoly(painted_lane, np.concatenate((left_points, right_points[::-1])), (0, 255, 0))
 	return cv2.addWeighted(painted_lane, alpha, warped, 1 - alpha, 0)
 
 
@@ -213,8 +308,8 @@ def detect_lines(image, debug=False):
 	if debug:
 		show_with_axes('Warped', warped)
 
-	(left_points, right_points) = interpolate_bottom_of_lines(points_on_lines(warped), warped.shape[0] - 1)
-	# Alternatively, without interpolation to the very bottom...
+	(left_points, right_points) = interpolate_bottom_of_lines(points_on_lines(warped, debug=debug), warped.shape[0] - 1)
+	# Alternatively, without interpolation to the very bottom:
 	#(left_points, right_points) = points_on_lines(warped)
 	painted = paint_lane(warped, left_points, right_points)
 	if debug:
