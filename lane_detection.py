@@ -112,9 +112,6 @@ def binary_histogram(binary_image, mask=None):
 	masked[masked > 0] = 1
 	return np.sum(masked, axis=0) # Sum along columns
 
-	#TODO(rjswitzer3) - REMOVE return [-b vehicle-detection DEV & TESTING ONLY]
-	return [warped, undone, image]
-
 
 def find_histogram_maxima(histogram):
 	'''
