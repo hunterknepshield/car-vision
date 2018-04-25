@@ -88,12 +88,14 @@ def new_roi(rx,ry,rw,rh,rectangles):
     return True
 
 
-def decipher_car(road, cascade, scalar=2, downsize=True):
+def decipher_car(road, cascade, scalar=2, decimate=True):
     '''
     Cascade file approach to decipher cars
     @params:
         road: image of the road ahead
         cascade: Pre-trained cascade xml file of haar car features
+        scalar: inteegr value to scale the image based on
+        decimate: boolean indicating whether or not to scale down the image
     @return:
         roi: regions within the image that contain cars
     '''
@@ -103,7 +105,7 @@ def decipher_car(road, cascade, scalar=2, downsize=True):
     roi = []
     h,w,c = road.shape
 
-    if downsize:
+    if decimate:
         #Scale down the image size (helps filter false positives)
         road = cv2.resize(road, (w/scalar, h/scalar))
     else:

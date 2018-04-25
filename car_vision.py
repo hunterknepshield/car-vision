@@ -42,11 +42,7 @@ def perceive_road_video(file):
 	'''
 	cap = cv2.VideoCapture(file)
 
-	r = cv2.VideoCapture.open(cap,file)
-	print(str(cap.isOpened()))
-
 	while cap.isOpened():
-		print('open')
 		(ret, frame) = cap.read()
 		painted = detect_lines(frame, False) # Don't stop stuff with show calls
 		painted = detect_vehicles(frame, painted, True)
