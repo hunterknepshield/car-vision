@@ -15,7 +15,7 @@ EXTENSIONS = set(['jpg','jpeg','jif','jfif','jp2','j2k','j2c','fpx','tif', \
 				  'cgm','svg'])
 
 # Set of supported video formats
-VIDEO_EXTENSIONS = set(['mp4'])
+VIDEO_EXTENSIONS = set(['mp4', 'avi'])
 
 
 def perceive_road(file, debug=False):
@@ -27,7 +27,7 @@ def perceive_road(file, debug=False):
 		TBD
 	'''
 	painted = detect_lines(cv2.imread(file), debug)
-	cv2.imshow('Painted', painted)
+	cv2.imshow(file, painted)
 	cv2.waitKey(0)
 	cv2.destroyAllWindows()
 	cv2.waitKey(1)
@@ -41,8 +41,11 @@ def perceive_road_video(file):
 	cap = cv2.VideoCapture(file)
 	while cap.isOpened():
 		(ret, frame) = cap.read()
+		if frame is None:
+			# End of video
+			break
 		painted = detect_lines(frame, False) # Don't stop stuff with show calls
-		cv2.imshow('Frame', painted)
+		cv2.imshow(file, painted)
 		# 25 ms is suggested for smooth video playback
 		if cv2.waitKey(25) & 0xFF == ord('q'):
 			break
