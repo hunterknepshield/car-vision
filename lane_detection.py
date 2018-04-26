@@ -308,6 +308,8 @@ def detect_lines(image, debug=False):
 	if debug:
 		show_with_axes('Warped', warped)
 
+	#yellowlane(warped)
+
 	(left_points, right_points) = interpolate_bottom_of_lines(points_on_lines(warped, debug=debug), warped.shape[0] - 1)
 	# Alternatively, without interpolation to the very bottom:
 	#(left_points, right_points) = points_on_lines(warped)
@@ -325,20 +327,19 @@ def detect_lines(image, debug=False):
 	return superimposed
 
 
-def cannyedge(image, lowerbound, upperbound):
-	'''
-	Applies canny edge detector to get lane markings
-	'''
-	return cv2.Canny(image,lowerbound,upperbound)
-
-
 def yellowlane(image):
 	'''
 	Convert image to hsv to get yellow channel, and gray scale to get white channel
 	'''
-	hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
-	gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+	hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+	lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
+	gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 	lowery = np.array([20, 100, 100], dtype="uint8")
 	uppery = np.array([30, 255, 255], dtype="uint8")
 	grays = cv2.inRange(gray, 200, 255)
 	yellow = cv2.inRange(hsv, lowery, uppery)
+	show_with_axes('hsv', hsv)
+	show_with_axes('lab', lab)
+	show_with_axes('gray', gray)
+	show_with_axes('grays', grays)
+	show_with_axes('yellows', yellow)
