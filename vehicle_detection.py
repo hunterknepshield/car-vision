@@ -46,7 +46,7 @@ def diff_horizontal(img):
         Mean squared error
     '''
     h,w,c = img.shape
-    half = w//2
+    half = w/2
 
     left = img[0:h, 0:half]
     left = cv2.resize(left, (32,64))
@@ -66,7 +66,7 @@ def diff_vertical(img):
         Mean squared error
     '''
     h,w,c = img.shape
-    half = h//2
+    half = h/2
 
     bttm = img[half:half+half, 0:w]
     bttm = cv2.resize(bttm, (32,64))
@@ -107,7 +107,7 @@ def decipher_car(road, cascade, scalar=2, decimate=True):
 
     if decimate:
         #Scale down the image size (helps filter false positives)
-        road = cv2.resize(road, (w//scalar, h//scalar))
+        road = cv2.resize(road, (w/scalar, h/scalar))
     else:
         #Scale up the image size (helps decipher vehicles at distance)
         road = cv2.resize(road, (w*scalar, h*scalar))
@@ -147,10 +147,11 @@ def object_ahead(road,lane):
     roi = []
     cascade = cv2.CascadeClassifier('cars.xml')
 
-    for i in range(1,5):
+    for i in range(2,4): #(1-4)
         roi.append( decipher_car(road, cascade, i) )
+        #roi.append( decipher_car(road, cascade, i, False) )
     regions = [r for region in roi for r in region]
-    #regions = decipher_car(road, cascade, 3)
+    #regions = decipher_car(road, cascade, 2) #Use this if performances sucks,
 
     for region in regions:
         if new_roi(region[0],region[1],region[2],region[3],rectangles):
