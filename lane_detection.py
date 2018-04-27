@@ -102,7 +102,32 @@ def superimpose(original, modified, anchors):
 	return superimposed
 
 
-def threshold(gray):
+def mask_yellow(image):
+	'''
+	Convert image to hsv to get a mask covering yellow parts of the image.
+	Output is a binary image in the range [0, 1].
+	'''
+	# Option 1: HSV
+	hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+	hsv_lower = np.array([20, 100, 100], dtype=hsv.dtype)
+	hsv_upper = np.array([30, 255, 255], dtype=hsv.dtype)
+	hsv_mask = cv2.inRange(hsv, hsv_lower, hsv_upper)
+	#show_with_axes('HSV mask', hsv_mask)
+
+	'''
+	# Option 2: Lab, roughly equivalent
+	lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
+	lab_lower = np.array([0, 130, 150], dtype=lab.dtype)
+	lab_upper = np.array([255, 255, 255], dtype=lab.dtype)
+	lab_mask = cv2.inRange(lab, lab_lower, lab_upper)
+	#show_with_axes('Lab mask', lab_mask)
+	'''
+
+	return hsv_mask.astype('bool') # Normalizes to [0, 1]
+	#return lab_mask.astype('bool') # Normalizes to [0, 1]
+
+
+def mask_gray(gray):
 	'''
 	Wrapper around cv2.threshold() call so we can easily swap out thresholding
 	methods for grayscale images if necessary. Returns a binary image in the
@@ -145,7 +170,7 @@ def find_histogram_maximum(histogram, left_threshold, right_threshold, vertical_
 		#   	green line (if it exists).
 		plt.plot(histogram)
 		plt.xlim([0, len(histogram)])
-		plt.ylim([0, max(max_value, vertical_threshold + 3)])
+		plt.ylim([0, max(max_value, vertical_threshold) + 3])
 		plt.axhline(y=max_value, color='r')
 		plt.axvline(x=max_index, color='r')
 		plt.axhline(y=vertical_threshold, color='k')
@@ -165,7 +190,7 @@ def find_histogram_maximum(histogram, left_threshold, right_threshold, vertical_
 	if max_value < vertical_threshold:
 		# Max is too small
 		return None
-	points_near_max = histogram > max_value - vertical_threshold
+	points_near_max = histogram >= max_value - vertical_threshold
 	# Ensure that there are no points larger than (max - vertical_threshold)
 	# further away than horizontal_threshold from max_index
 	if max_index - left_threshold//2 > 0:
@@ -216,8 +241,8 @@ def points_on_lines(warped, strip_size=50, hood_size=10, debug=False):
 	gray = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
 	# But if one or both of the lanes is yellow, prefer the HSV mask instead
 	vhalf = warped.shape[1]//2
-	lyellow = yellow_mask(warped[:, :vhalf])
-	ryellow = yellow_mask(warped[:, vhalf:])
+	lyellow = mask_yellow(warped[:, :vhalf])
+	ryellow = mask_yellow(warped[:, vhalf:])
 	(use_lyellow, use_ryellow) = (lyellow.sum() >= YELLOW_THRESHOLD, ryellow.sum() >= YELLOW_THRESHOLD)
 	'''
 	# This is obvious enough from the titles of the binary strips plotted below.
@@ -235,14 +260,14 @@ def points_on_lines(warped, strip_size=50, hood_size=10, debug=False):
 		if use_lyellow:
 			lstrip = lyellow[strip_begin:strip_end, :]
 		else:
-			lstrip = threshold(gray[strip_begin:strip_end, :vhalf])
+			lstrip = mask_gray(gray[strip_begin:strip_end, :vhalf])
 		lhist = histogram(lstrip)
 		lmax = find_left_histogram_maximum(lhist, debug=debug, subplot_num=325)
 
 		if use_ryellow:
 			rstrip = ryellow[strip_begin:strip_end, :]
 		else:
-			rstrip = threshold(gray[strip_begin:strip_end, vhalf:])
+			rstrip = mask_gray(gray[strip_begin:strip_end, vhalf:])
 		rhist = histogram(rstrip)
 		rmax = find_right_histogram_maximum(rhist, debug=debug, subplot_num=326) # Offset!
 
@@ -283,33 +308,60 @@ def interpolate_bottom_of_lines(lines, bottom_row, polynomial_degree=1):
 	Since points on the lines are marked on the warped image, there will be a
 	large gap at the bottom when warping back without interpolating all the way
 	to the bottom. Takes a tuple of (left_points, right_points) for simple
-	wrapping around points_on_lines(). Only interpolates if both lines have
-	enough points close to the bottom of the image.
+	wrapping around points_on_lines(). Only interpolates if both lines have more
+	than one point close to the bottom of the image.
 	'''
 	(left_points, right_points) = lines
 	# It's more or less safe to assume that points closer to the car are more
 	# likely to fit a straighter line.
 	closeness_cutoff = bottom_row//3
 	(left_interp, right_interp) = (None, None) # Only interpolate both at once
-	# Argmax blows up on empty lists
+	# Argmax blows up on empty lists, so we need nested checks
 	if len(left_points) > 0:
 		left_cutoff = np.argmax(left_points[:, 1] > closeness_cutoff)
-		# Need at least 2 points to interpolate
-		if len(left_points) - left_cutoff > 1:
+		# Need at least (degree + 1) points to interpolate
+		if len(left_points) - left_cutoff > polynomial_degree:
 			left_line = np.polyfit(left_points[left_cutoff:, 1], left_points[left_cutoff:, 0], polynomial_degree)
 			left_interp = np.array([[np.polyval(left_line, bottom_row), bottom_row]], dtype=left_points.dtype)
 	if len(right_points) > 0:
 		right_cutoff = np.argmax(right_points[:, 1] > closeness_cutoff)
-		# Need at least 2 points to interpolate
-		if len(right_points) - right_cutoff > 1:
+		# Need at least (degree + 1) points to interpolate
+		if len(right_points) - right_cutoff > polynomial_degree:
 			right_line = np.polyfit(right_points[right_cutoff:, 1], right_points[right_cutoff:, 0], polynomial_degree)
 			right_interp = np.array([[np.polyval(right_line, bottom_row), bottom_row]], dtype=right_points.dtype)
-	if left_interp is not None and right_interp is not None:
-		# Only interpolate when both lines can be interpolated, otherwise we get
-		# awkward trapezoid-like shapes that look worse than the original.
-		left_points = np.append(left_points, left_interp, axis=0)
-		right_points = np.append(right_points, right_interp, axis=0)
-	return (left_points, right_points)
+	if left_interp is None or right_interp is None:
+		# Only return a result when both lines can be interpolated, otherwise we
+		# get awkward trapezoid-like shapes that look worse than the original.
+		(left_interp, right_interp) = (None, None)
+	return (left_interp, right_interp)
+
+
+def interpolate_top_of_lines(lines, polynomial_degree=2):
+	'''
+	If the top of the lines don't have the same Y coordinate, we want to
+	interpolate so they don't have an ugly trapezoid-ish shape at the top. Only
+	interpolates if the two lines have uneven points at the top of the image and
+	the line that needs to be extended has more than one point. Default
+	polynomial_degree allows quadratics since the lines may curve more towards
+	the top of the image.
+	'''
+	(left_points, right_points) = lines
+	if len(left_points) == 0 or len(right_points) == 0:
+		# Can't interpolate with a missing line
+		return (None, None)
+	left_ymin = np.min(left_points[:, 1])
+	right_ymin = np.min(right_points[:, 1])
+	(left_interp, right_interp) = (None, None)
+	if left_ymin < right_ymin and len(right_points) > polynomial_degree:
+		# Need to interpolate right line
+		right_line = np.polyfit(right_points[:, 1], right_points[:, 0], polynomial_degree)
+		right_interp = np.array([[np.polyval(right_line, left_ymin), left_ymin]], dtype=right_points.dtype)
+	elif right_ymin < left_ymin and len(left_points) > polynomial_degree:
+		# Need to interpolate the left line
+		left_line = np.polyfit(left_points[:, 1], left_points[:, 0], polynomial_degree)
+		left_interp = np.array([[np.polyval(left_line, right_ymin), right_ymin]], dtype=left_points.dtype)
+	# If both lines already have the same highest point, no interpolation needed
+	return (left_interp, right_interp)
 
 
 def paint_lane(warped, left_points, right_points, alpha=0.25):
@@ -322,6 +374,9 @@ def paint_lane(warped, left_points, right_points, alpha=0.25):
 	if len(left_points) == 0 and len(right_points) == 0:
 		# Nothing to draw
 		return painted_lane
+	# These nasty one-liners sort by Y value
+	left_points = left_points[left_points[:, 1].argsort()]
+	right_points = right_points[right_points[:, 1].argsort()]
 	if len(left_points) != 0 and len(right_points) != 0:
 		# We actually have a polygon to fill. Method assumes that points are in
 		# clockwise order.
@@ -348,11 +403,29 @@ def detect_lines(image, debug=False):
 	(warped, trapezoid_points, warp_matrix) = get_birds_eye_view(image)
 	if debug:
 		show_with_axes('Warped', warped)
+	unblurred_warped = warped.copy()
+	warped = cv2.GaussianBlur(warped, (5, 5), 0)
 
-	(left_points, right_points) = interpolate_bottom_of_lines(points_on_lines(warped, debug=debug), warped.shape[0] - 1)
-	# Alternatively, without interpolation to the very bottom:
-	#(left_points, right_points) = points_on_lines(warped)
-	painted = paint_lane(warped, left_points, right_points)
+	lines = points_on_lines(warped, debug=debug)
+	if debug:
+		# Show results without interpolation
+		painted_no_interp = paint_lane(unblurred_warped, lines[0], lines[1])
+		show_with_axes('Painted (no interpolation)', painted_no_interp)
+	# We don't want the interpolations interfering with each other
+	top_interp = interpolate_top_of_lines(lines)
+	bottom_interp = interpolate_bottom_of_lines(lines, warped.shape[0] - 1)
+	(left_points, right_points) = lines
+	if top_interp[0] is not None:
+		left_points = np.append(left_points, top_interp[0], axis=0)
+	if top_interp[1] is not None:
+		right_points = np.append(right_points, top_interp[1], axis=0)
+	if bottom_interp[0] is not None:
+		left_points = np.append(left_points, bottom_interp[0], axis=0)
+	if bottom_interp[1] is not None:
+		right_points = np.append(right_points, bottom_interp[1], axis=0)
+
+	# Don't paint on the slightly uglier blurred version
+	painted = paint_lane(unblurred_warped, left_points, right_points)
 	if debug:
 		show_with_axes('Painted', painted)
 
@@ -364,25 +437,3 @@ def detect_lines(image, debug=False):
 	if debug:
 		show_with_axes('Superimposed', superimposed)
 	return superimposed
-
-
-def yellow_mask(image):
-	'''
-	Convert image to hsv to get a mask covering yellow parts of the image.
-	Output is a binary image in the range [0, 1].
-	'''
-	hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-#	lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
-#	gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-#	grays = cv2.inRange(gray, 200, 255)
-	lowery = np.array([20, 100, 100], dtype=np.uint8)
-	uppery = np.array([30, 255, 255], dtype=np.uint8)
-	yellow = cv2.inRange(hsv, lowery, uppery)
-	'''
-	show_with_axes('hsv', hsv)
-	show_with_axes('lab', lab)
-	show_with_axes('gray', gray)
-	show_with_axes('grays', grays)
-	show_with_axes('yellows', yellow)
-	'''
-	return yellow.astype('bool') # Normalizes to [0, 1]
