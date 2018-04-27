@@ -17,9 +17,6 @@ EXTENSIONS = set(['jpg','jpeg','jif','jfif','jp2','j2k','j2c','fpx','tif', \
 # Set of supported video formats
 VIDEO_EXTENSIONS = set(['mp4','avi'])
 
-#Set path
-PATH = '/'
-
 
 def write_result(imgs,img,name):
     '''
@@ -50,7 +47,7 @@ def perceive_road(file, debug=False):
 		TBD
 	'''
 	road = cv2.imread(file)
-	painted = detect_lines(road, debug)
+	painted = detect_lines(road, debug=debug)
 	painted = detect_vehicles(road, painted)
 	cv2.imshow('Painted', painted)
 	cv2.waitKey(0)
