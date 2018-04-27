@@ -88,14 +88,12 @@ def new_roi(rx,ry,rw,rh,rectangles):
     return True
 
 
-def decipher_car(road, cascade, scalar=2, decimate=True):
+def decipher_car(road, cascade, scalar=2, downsize=True):
     '''
     Cascade file approach to decipher cars
     @params:
         road: image of the road ahead
         cascade: Pre-trained cascade xml file of haar car features
-        scalar: inteegr value to scale the image based on
-        decimate: boolean indicating whether or not to scale down the image
     @return:
         roi: regions within the image that contain cars
     '''
@@ -105,7 +103,7 @@ def decipher_car(road, cascade, scalar=2, decimate=True):
     roi = []
     h,w,c = road.shape
 
-    if decimate:
+    if downsize:
         #Scale down the image size (helps filter false positives)
         road = cv2.resize(road, (w/scalar, h/scalar))
     else:
@@ -119,17 +117,18 @@ def decipher_car(road, cascade, scalar=2, decimate=True):
     # haar detection
     cars = cascade.detectMultiScale(img, scaleFactor=1.1, minNeighbors=2)
 
+    minY = road.shape[0]*0.15
     for (x,y,w,h) in cars:
         car = road[y:y+h, x:x+w]
         #show('CAR',car) #TODO TESTING
+        if y >  minY:
+            diffX = round(diff_horizontal(car))
+            diffY = round(diff_vertical(car))
 
-        diffX = round(diff_horizontal(car))
-        diffY = round(diff_vertical(car))
-
-        print('(dX->'+str(diffX)+', dY->'+str(diffY)+')') #TODO TESTING
-        #[1600,3000,12000], [1600,16000,6000]
-        #if diffX > 1600 and diffX < 3000 and diffY > 12000: #TODO(rjswitzer3) [1&2]
-        roi.append( [x*scalar,y*scalar,w*scalar,h*scalar])
+            print('(dX->'+str(diffX)+', dY->'+str(diffY)+')') #TODO TESTING
+            #[1600,3000,12000], [1600,16000,6000]
+            #if diffX > 1600 and diffX < 3000 and diffY > 12000: #TODO(rjswitzer3) [1&2]
+            roi.append( [x*scalar,y*scalar,w*scalar,h*scalar])
 
     return roi
 
@@ -147,11 +146,10 @@ def object_ahead(road,lane):
     roi = []
     cascade = cv2.CascadeClassifier('cars.xml')
 
-    for i in range(2,4): #(1-4)
+    for i in range(1,5):
         roi.append( decipher_car(road, cascade, i) )
-        #roi.append( decipher_car(road, cascade, i, False) )
     regions = [r for region in roi for r in region]
-    #regions = decipher_car(road, cascade, 2) #Use this if performances sucks,
+    #regions = decipher_car(road, cascade, 3)
 
     for region in regions:
         if new_roi(region[0],region[1],region[2],region[3],rectangles):
