@@ -46,6 +46,7 @@ def perceive_road_video(file):
 	debug = False
 	paint_extra = False
 	fast_forward = 0
+	manual = False
 	while cap.isOpened():
 		if fast_forward > 0:
 			fast_forward -= 1
@@ -62,22 +63,22 @@ def perceive_road_video(file):
 		cv2.imshow(file, painted)
 		# 25 ms is suggested for smooth video playback, 1 seems to work too
 		# Debug makes it annoying to escape the loop, so wait forever if it's on
-		input = cv2.waitKey(1 if not debug else 0) & 0xFF
-		if input == ord('q') or input == ord('s'):
-			# Quit/skip
+		input = cv2.waitKey(1 if not debug and not manual else 0) & 0xFF
+		if input == ord('q'):
+			# Quit (breaks out of this current video only)
 			break
 		elif input == ord('Q'):
-			# Quit everything
+			# Quit everything (terminates the program)
 			cont = False
 			break
 		elif input == ord('p'):
 			# Pause
 			cv2.waitKey(0)
 		elif input == ord('d'):
-			# Toggle debug
+			# Debug toggle
 			debug = not debug
 		elif input == ord('e'):
-			# Toggle extra painting
+			# Extra painting toggle
 			paint_extra = not paint_extra
 		elif input == ord('f'):
 			# Fast-forward
@@ -85,6 +86,9 @@ def perceive_road_video(file):
 		elif input == ord('F'):
 			# Fast-forward even more
 			fast_forward = 60
+		elif input == ord('m'):
+			# Manual toggle
+			manual = not manual
 	cap.release()
 	cv2.destroyAllWindows()
 	cv2.waitKey(1)
