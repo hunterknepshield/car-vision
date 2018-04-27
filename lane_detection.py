@@ -28,24 +28,22 @@ def show_with_axes(name, image, conversion=cv2.COLOR_BGR2RGB):
 	plt.show()
 
 
-def paint_trapezoid(image, points, color=(255, 255, 255), thickness=8, alpha=0.25):
+def paint_trapezoid(image, points, color=(255, 255, 255), middle_color=(0, 0, 255), thickness=8, alpha=0.25):
 	'''
-	Assumes points are in a clockwise order. Drawing is done directly on the
-	supplied image. The supplied alpha can be None, which prevents a copy.
+	Assumes points are in a clockwise order. Paints directly on the input image.
 	'''
 	assert(len(points) == 4)
-	if alpha is not None:
-		copy = image.copy()
-		cv2.line(copy, tuple(points[0]), tuple(points[1]), color, thickness)
-		cv2.line(copy, tuple(points[1]), tuple(points[2]), color, thickness)
-		cv2.line(copy, tuple(points[2]), tuple(points[3]), color, thickness)
-		cv2.line(copy, tuple(points[3]), tuple(points[0]), color, thickness)
-		cv2.addWeighted(copy, alpha, image, 1 - alpha, 0, image)
-	else:
-		cv2.line(image, tuple(points[0]), tuple(points[1]), color, thickness)
-		cv2.line(image, tuple(points[1]), tuple(points[2]), color, thickness)
-		cv2.line(image, tuple(points[2]), tuple(points[3]), color, thickness)
-		cv2.line(image, tuple(points[3]), tuple(points[0]), color, thickness)
+	painted = image.copy()
+	cv2.line(painted, tuple(points[0]), tuple(points[1]), color, thickness)
+	cv2.line(painted, tuple(points[1]), tuple(points[2]), color, thickness)
+	cv2.line(painted, tuple(points[2]), tuple(points[3]), color, thickness)
+	cv2.line(painted, tuple(points[3]), tuple(points[0]), color, thickness)
+	# Find the middle to paint a vertical line
+	sorted_by_y = points[points[:, 1].argsort()]
+	top_middle = (sorted_by_y[0] + sorted_by_y[1])//2
+	bottom_middle = (sorted_by_y[2] + sorted_by_y[3])//2
+	cv2.line(painted, tuple(top_middle), tuple(bottom_middle), middle_color, thickness)
+	return cv2.addWeighted(painted, alpha, image, 1 - alpha, 0, image) # dst=image
 
 
 def get_birds_eye_view(image, is_our_dashcam, debug=False):
@@ -74,16 +72,15 @@ def get_birds_eye_view(image, is_our_dashcam, debug=False):
 		top_left = (int(cols*.45), int(rows*.6))
 		top_right = (int(cols*.55), int(rows*.6))
 
-	if debug:
-		lines = image.copy() # Don't screw up the original image
-		paint_trapezoid(lines, [bottom_left, bottom_right, top_right, top_left])
-		show_with_axes('Trapezoid selection', lines)
-
 	# The ordering of `points` and `new_perspective` must match.
 	original_points = np.array([top_left, top_right, bottom_right, bottom_left], dtype=np.float32)
 	width = bottom_right[0] - bottom_left[0]
 	height = bottom_left[1] - top_left[1]
 	warped_points = np.array([(0, 0), (width, 0), (width, height), (0, height)], dtype=np.float32)
+
+	if debug:
+		lines = paint_trapezoid(image.copy(), original_points, color=(255, 0, 0))
+		show_with_axes('Trapezoid selection', lines)
 
 	# Warp to bird's eye view
 	perspective_matrix = cv2.getPerspectiveTransform(original_points, warped_points)
@@ -102,7 +99,7 @@ def get_original_view(warped, warp_matrix, original_shape):
 def superimpose(original, modified, anchors):
 	'''
 	Superimposes the modified image within the bounds of anchors on top of the
-	original image.
+	original image. Does __not__ draw on the original image.
 	'''
 	assert(original.shape == modified.shape)
 	superimposed = original.copy()
@@ -399,38 +396,38 @@ def interpolate_top_of_lines(lines, polynomial_degree=2):
 def paint_lane(warped, left_points, right_points, alpha=0.25):
 	'''
 	Paints circles on the points supplied for both lines, the interpolated
-	lines, and the interpolated lane area. All painting is done with the
-	specified alpha value. The source image is not modified.
+	lines, and the interpolated lane area. Paints directly on the input image.
 	'''
-	painted_lane = warped.copy()
 	if len(left_points) == 0 and len(right_points) == 0:
 		# Nothing to draw
-		return painted_lane
+		return warped
 	# These nasty one-liners sort by Y value
 	if len(left_points) != 0:
 		left_points = left_points[left_points[:, 1].argsort()]
 	if len(right_points) != 0:
 		right_points = right_points[right_points[:, 1].argsort()]
+	painted = warped.copy()
 	if len(left_points) != 0 and len(right_points) != 0:
 		# We actually have a polygon to fill. Method assumes that points are in
 		# clockwise order.
-		cv2.fillConvexPoly(painted_lane, np.concatenate((left_points, right_points[::-1])), (0, 255, 0))
+		cv2.fillConvexPoly(painted, np.concatenate((left_points, right_points[::-1])), (0, 255, 0))
 	if len(left_points) > 1:
 		# Need 2 or more points to draw a line
-		cv2.polylines(painted_lane, [left_points], False, (255, 0, 255), thickness=5)
+		cv2.polylines(painted, [left_points], False, (255, 0, 255), thickness=5)
 	if len(right_points) > 1:
 		# Need 2 or more points to draw a line
-		cv2.polylines(painted_lane, [right_points], False, (255, 0, 255), thickness=5)
+		cv2.polylines(painted, [right_points], False, (255, 0, 255), thickness=5)
 	for left_point in left_points:
-		cv2.circle(painted_lane, tuple(left_point), 1, (255, 0, 0), thickness=10)
+		cv2.circle(painted, tuple(left_point), 1, (255, 0, 0), thickness=10)
 	for right_point in right_points:
-		cv2.circle(painted_lane, tuple(right_point), 1, (0, 0, 255), thickness=10)
-	return cv2.addWeighted(painted_lane, alpha, warped, 1 - alpha, 0)
+		cv2.circle(painted, tuple(right_point), 1, (0, 0, 255), thickness=10)
+	return cv2.addWeighted(painted, alpha, warped, 1 - alpha, 0, warped)
 
 
 def detect_lines(image, is_our_dashcam=False, debug=False, paint_extra=False):
 	'''
-	Works with static images. Ideally we can scale to videos easily.
+	Works with static images. Ideally we can scale to videos easily. Does
+	__not__ paint directly on the input image.
 	'''
 	if debug:
 		show_with_axes('Original', image)
@@ -443,7 +440,7 @@ def detect_lines(image, is_our_dashcam=False, debug=False, paint_extra=False):
 	lines = points_on_lines(warped, debug=debug)
 	if debug:
 		# Show results without interpolation
-		painted_no_interp = paint_lane(unblurred_warped, lines[0], lines[1])
+		painted_no_interp = paint_lane(unblurred_warped.copy(), lines[0], lines[1])
 	# We don't want the interpolations interfering with each other
 	top_interp = interpolate_top_of_lines(lines)
 	bottom_interp = interpolate_bottom_of_lines(lines, warped.shape[0] - 1)
