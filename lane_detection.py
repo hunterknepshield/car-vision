@@ -28,7 +28,27 @@ def show_with_axes(name, image, conversion=cv2.COLOR_BGR2RGB):
 	plt.show()
 
 
-def get_birds_eye_view(image):
+def paint_trapezoid(image, points, color=(255, 255, 255), thickness=8, alpha=0.25):
+	'''
+	Assumes points are in a clockwise order. Drawing is done directly on the
+	supplied image. The supplied alpha can be None, which prevents a copy.
+	'''
+	assert(len(points) == 4)
+	if alpha is not None:
+		copy = image.copy()
+		cv2.line(copy, tuple(points[0]), tuple(points[1]), color, thickness)
+		cv2.line(copy, tuple(points[1]), tuple(points[2]), color, thickness)
+		cv2.line(copy, tuple(points[2]), tuple(points[3]), color, thickness)
+		cv2.line(copy, tuple(points[3]), tuple(points[0]), color, thickness)
+		cv2.addWeighted(copy, alpha, image, 1 - alpha, 0, image)
+	else:
+		cv2.line(image, tuple(points[0]), tuple(points[1]), color, thickness)
+		cv2.line(image, tuple(points[1]), tuple(points[2]), color, thickness)
+		cv2.line(image, tuple(points[2]), tuple(points[3]), color, thickness)
+		cv2.line(image, tuple(points[3]), tuple(points[0]), color, thickness)
+
+
+def get_birds_eye_view(image, is_our_dashcam, debug=False):
 	'''
 	Based on the image dimensions, we select from the bottom corners to
 	slightly above the center of the image. Returns this region warped to be a
@@ -41,20 +61,23 @@ def get_birds_eye_view(image):
 	'''
 	# Generate the original anchor points.
 	(rows, cols) = (image.shape[0], image.shape[1])
-	bottom_left = (int(cols*.1), int(rows))
-	bottom_right = (int(cols*.9), int(rows))
-	top_left = (int(cols*.45), int(rows*.6))
-	top_right = (int(cols*.55), int(rows*.6))
+	if is_our_dashcam:
+		# For our dashcam videos... (camera is slightly far to the right)
+		bottom_left = (-500, int(rows)) # Yes, it's fine to have negative coords
+		bottom_right = (int(cols) + 100, int(rows))
+		top_left = (int(cols*.25), int(rows*.35))
+		top_right = (int(cols*.55), int(rows*.35))
+	else:
+		# Canonical for images...
+		bottom_left = (int(cols*.1), int(rows))
+		bottom_right = (int(cols*.9), int(rows))
+		top_left = (int(cols*.45), int(rows*.6))
+		top_right = (int(cols*.55), int(rows*.6))
 
-	# For debugging purposes...
-	'''
-	lines = image.copy()
-	cv2.line(lines, bottom_left, bottom_right, (0, 0, 255), 10) # Red
-	cv2.line(lines, bottom_right, top_right, (0, 255, 0), 10) # Green
-	cv2.line(lines, top_right, top_left, (255, 0, 0), 10) # Blue
-	cv2.line(lines, top_left, bottom_left, (255, 255, 255), 10) # White
-	show_with_axes('Lines', lines)
-	#'''
+	if debug:
+		lines = image.copy() # Don't screw up the original image
+		paint_trapezoid(lines, [bottom_left, bottom_right, top_right, top_left])
+		show_with_axes('Trapezoid selection', lines)
 
 	# The ordering of `points` and `new_perspective` must match.
 	original_points = np.array([top_left, top_right, bottom_right, bottom_left], dtype=np.float32)
@@ -352,14 +375,23 @@ def interpolate_top_of_lines(lines, polynomial_degree=2):
 	left_ymin = np.min(left_points[:, 1])
 	right_ymin = np.min(right_points[:, 1])
 	(left_interp, right_interp) = (None, None)
-	if left_ymin < right_ymin and len(right_points) > polynomial_degree:
+	if left_ymin < right_ymin:
 		# Need to interpolate right line
-		right_line = np.polyfit(right_points[:, 1], right_points[:, 0], polynomial_degree)
-		right_interp = np.array([[np.polyval(right_line, left_ymin), left_ymin]], dtype=right_points.dtype)
+		# We ideally want a quadratic, but if we can't get that, a line should
+		# be relatively decent still.
+		while len(right_points) <= polynomial_degree:
+			polynomial_degree -= 1
+		if polynomial_degree > 0:
+			# Interpolate the right line
+			right_line = np.polyfit(right_points[:, 1], right_points[:, 0], polynomial_degree)
+			right_interp = np.array([[np.polyval(right_line, left_ymin), left_ymin]], dtype=right_points.dtype)
 	elif right_ymin < left_ymin and len(left_points) > polynomial_degree:
-		# Need to interpolate the left line
-		left_line = np.polyfit(left_points[:, 1], left_points[:, 0], polynomial_degree)
-		left_interp = np.array([[np.polyval(left_line, right_ymin), right_ymin]], dtype=left_points.dtype)
+		while len(left_points) <= polynomial_degree:
+			polynomial_degree -= 1
+		if polynomial_degree > 0:
+			# Interpolate the left line
+			left_line = np.polyfit(left_points[:, 1], left_points[:, 0], polynomial_degree)
+			left_interp = np.array([[np.polyval(left_line, right_ymin), right_ymin]], dtype=left_points.dtype)
 	# If both lines already have the same highest point, no interpolation needed
 	return (left_interp, right_interp)
 
@@ -375,8 +407,10 @@ def paint_lane(warped, left_points, right_points, alpha=0.25):
 		# Nothing to draw
 		return painted_lane
 	# These nasty one-liners sort by Y value
-	left_points = left_points[left_points[:, 1].argsort()]
-	right_points = right_points[right_points[:, 1].argsort()]
+	if len(left_points) != 0:
+		left_points = left_points[left_points[:, 1].argsort()]
+	if len(right_points) != 0:
+		right_points = right_points[right_points[:, 1].argsort()]
 	if len(left_points) != 0 and len(right_points) != 0:
 		# We actually have a polygon to fill. Method assumes that points are in
 		# clockwise order.
@@ -394,13 +428,13 @@ def paint_lane(warped, left_points, right_points, alpha=0.25):
 	return cv2.addWeighted(painted_lane, alpha, warped, 1 - alpha, 0)
 
 
-def detect_lines(image, debug=False):
+def detect_lines(image, is_our_dashcam=False, debug=False, paint_extra=False):
 	'''
 	Works with static images. Ideally we can scale to videos easily.
 	'''
 	if debug:
 		show_with_axes('Original', image)
-	(warped, trapezoid_points, warp_matrix) = get_birds_eye_view(image)
+	(warped, trapezoid_points, warp_matrix) = get_birds_eye_view(image, is_our_dashcam, debug)
 	if debug:
 		show_with_axes('Warped', warped)
 	unblurred_warped = warped.copy()
@@ -410,30 +444,40 @@ def detect_lines(image, debug=False):
 	if debug:
 		# Show results without interpolation
 		painted_no_interp = paint_lane(unblurred_warped, lines[0], lines[1])
-		show_with_axes('Painted (no interpolation)', painted_no_interp)
 	# We don't want the interpolations interfering with each other
 	top_interp = interpolate_top_of_lines(lines)
 	bottom_interp = interpolate_bottom_of_lines(lines, warped.shape[0] - 1)
 	(left_points, right_points) = lines
+	interpolated = False
 	if top_interp[0] is not None:
+		interpolated = True
 		left_points = np.append(left_points, top_interp[0], axis=0)
 	if top_interp[1] is not None:
+		interpolated = True
 		right_points = np.append(right_points, top_interp[1], axis=0)
 	if bottom_interp[0] is not None:
+		interpolated = True
 		left_points = np.append(left_points, bottom_interp[0], axis=0)
 	if bottom_interp[1] is not None:
+		interpolated = True
 		right_points = np.append(right_points, bottom_interp[1], axis=0)
 
 	# Don't paint on the slightly uglier blurred version
 	painted = paint_lane(unblurred_warped, left_points, right_points)
 	if debug:
-		show_with_axes('Painted', painted)
+		if interpolated:
+			show_with_axes('Painted (no interpolation)', painted_no_interp)
+			show_with_axes('Painted (with interpolation)', painted)
+		else:
+			show_with_axes('Painted', painted)
 
 	undone = get_original_view(painted, warp_matrix, image.shape)
 	if debug:
 		show_with_axes('Undone', undone)
 
 	superimposed = superimpose(image, undone, trapezoid_points)
+	if paint_extra:
+		paint_trapezoid(superimposed, trapezoid_points)
 	if debug:
 		show_with_axes('Superimposed', superimposed)
 	return superimposed

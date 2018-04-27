@@ -39,16 +39,32 @@ def perceive_road_video(file):
 	A quick wrapper around lane detection for a video file. See above.
 	'''
 	cap = cv2.VideoCapture(file)
+	is_our_dashcam = file.startswith('videos/dash-cam')
+	debug = False
+	paint_extra = False
 	while cap.isOpened():
 		(ret, frame) = cap.read()
 		if not ret or frame is None:
 			# End of video
 			break
-		painted = detect_lines(frame, False) # Don't stop stuff with show calls
+		# Set debug to false os we don't show anything with pyplot and block
+		painted = detect_lines(frame, is_our_dashcam=is_our_dashcam, debug=debug, paint_extra=paint_extra)
 		cv2.imshow(file, painted)
 		# 25 ms is suggested for smooth video playback, 1 seems to work too
-		if cv2.waitKey(1) & 0xFF == ord('q'):
+		# Debug makes it annoying to escape the loop, so wait forever if it's on
+		input = cv2.waitKey(1 if not debug else 0) & 0xFF
+		if input == ord('q'):
+			# Quit
 			break
+		elif input == ord('p'):
+			# Pause
+			cv2.waitKey(0)
+		elif input == ord('d'):
+			# Toggle debug
+			debug = not debug
+		elif input == ord('e'):
+			# Toggle extra painting
+			paint_extra = not paint_extra
 	cap.release()
 	cv2.destroyAllWindows()
 	cv2.waitKey(1)
