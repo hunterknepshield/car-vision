@@ -51,7 +51,7 @@ def perceive_road(file, debug=False):
 	'''
 	road = cv2.imread(file)
 	painted = detect_lines(road, debug)
-	detect_vehicles(road, painted)
+	painted = detect_vehicles(road, painted)
 	cv2.imshow('Painted', painted)
 	cv2.waitKey(0)
 	cv2.destroyAllWindows()
