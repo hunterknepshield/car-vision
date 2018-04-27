@@ -46,8 +46,8 @@ def perceive_road_video(file):
 			break
 		painted = detect_lines(frame, False) # Don't stop stuff with show calls
 		cv2.imshow(file, painted)
-		# 25 ms is suggested for smooth video playback
-		if cv2.waitKey(25) & 0xFF == ord('q'):
+		# 25 ms is suggested for smooth video playback, 1 seems to work too
+		if cv2.waitKey(1) & 0xFF == ord('q'):
 			break
 	cap.release()
 	cv2.destroyAllWindows()
