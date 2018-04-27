@@ -117,7 +117,7 @@ def decipher_car(road, cascade, scalar=2, downsize=True):
     # haar detection
     cars = cascade.detectMultiScale(img, scaleFactor=1.1, minNeighbors=2)
 
-    minY = road.shape[0]*0.15
+    minY = road.shape[0]*0.2
     for (x,y,w,h) in cars:
         car = road[y:y+h, x:x+w]
         #show('CAR',car) #TODO TESTING
@@ -126,9 +126,9 @@ def decipher_car(road, cascade, scalar=2, downsize=True):
             diffY = round(diff_vertical(car))
 
             print('(dX->'+str(diffX)+', dY->'+str(diffY)+')') #TODO TESTING
-            #[1600,3000,12000], [1600,16000,6000]
-            #if diffX > 1600 and diffX < 3000 and diffY > 12000: #TODO(rjswitzer3) [1&2]
-            roi.append( [x*scalar,y*scalar,w*scalar,h*scalar])
+            #[1600,3000,12000], [1600,16000,6000], [1600,7000], [1000,2000]
+            if diffX > 1000 and diffY > 2000:
+                roi.append( [x*scalar,y*scalar,w*scalar,h*scalar])
 
     return roi
 
@@ -146,7 +146,7 @@ def object_ahead(road,lane):
     roi = []
     cascade = cv2.CascadeClassifier('cars.xml')
 
-    for i in range(1,5):
+    for i in range(2,4):
         roi.append( decipher_car(road, cascade, i) )
     regions = [r for region in roi for r in region]
     #regions = decipher_car(road, cascade, 3)
