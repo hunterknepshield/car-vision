@@ -44,6 +44,9 @@ def perceive_road_video(file):
 
 	while cap.isOpened():
 		(ret, frame) = cap.read()
+		if frame is None:
+			# End of video
+			break
 		painted = detect_lines(frame, False) # Don't stop stuff with show calls
 		painted = detect_vehicles(frame, painted, True)
 		cv2.imshow('Frame', painted)
