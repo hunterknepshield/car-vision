@@ -31,7 +31,7 @@ def write_result(imgs,img,name):
     @returns:
         None
     '''
-    newfile = '.'.join(PATH.split('.')[:-1]) + '_'+name+'.' + PATH.split('.')[-1]
+    newfile = '.'.join(PATH.split('.')[:-1]) + '_'+name+'.jpg' #+ PATH.split('.')[-1]
 
     if imgs != None:
         # Create side-by-side comparison and write
