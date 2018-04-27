@@ -102,39 +102,27 @@ def superimpose(original, modified, anchors):
 	return superimposed
 
 
-def strip_threshold_and_histogram(gray, strip_begin, strip_end, debug=False):
+def threshold(gray):
 	'''
-	Scans horizontally across a binary image and returns a histogram of pixel
+	Wrapper around cv2.threshold() call so we can easily swap out thresholding
+	methods for grayscale images if necessary. Returns a binary image in the
+	range [0, 1].
+	'''
+	return cv2.threshold(gray, 0, 1, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+
+
+def histogram(binary):
+	'''
+	Scans vertically across a binary image and returns a histogram of pixel
 	count against the column index after thresholding it. Gives an idea of
-	horizontal location of lane markings.
+	horizontal location of lane markings based on location of the maximum.
 	'''
-	masked = gray[strip_begin:strip_end, :]
-	# TODO(hknepshield) blur first?
-	(thresh_num, thresholded) = cv2.threshold(masked, 0, 1, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-	hist = np.sum(thresholded, axis=0) # Sum along columns
-	if debug:
-		# Draws the dividing line between the halves of the strip as well.
-		midpoint = masked.shape[1]//2
-		plt.subplot(311)
-		plt.imshow(masked, cmap='gray')
-		plt.axvline(x=midpoint, color='r')
-		plt.title('Strip {} to {}'.format(strip_begin, strip_end))
-		plt.subplot(312)
-		plt.imshow(thresholded, cmap='gray')
-		plt.axvline(x=midpoint, color='r')
-		plt.title('Thresholded')
-		plt.subplot(313)
-		plt.plot(hist)
-		plt.axvline(x=midpoint, color='r')
-		plt.xlim([0, thresholded.shape[1]]) # Kill margins so it lines up nicely
-		plt.title('Histogram')
-		plt.show()
-	return hist
+	return np.sum(binary, axis=0)
 
 
 DEFAULT_HORIZONTAL_THRESHOLD=50
 
-def find_histogram_maximum(histogram, left_threshold, right_threshold, vertical_threshold=5, debug=False):
+def find_histogram_maximum(histogram, left_threshold, right_threshold, vertical_threshold=5, debug=False, subplot_num=None):
 	'''
 	Finds the index of the maximum value of the supplied histogram. There are
 	several conditions to make sure the histogram is roughly unimodal (e.g. the
@@ -144,16 +132,20 @@ def find_histogram_maximum(histogram, left_threshold, right_threshold, vertical_
 	'''
 	max_index = np.argmax(histogram)
 	max_value = histogram[max_index]
-	'''
 	if debug:
+		if subplot_num is not None:
+			plt.subplot(subplot_num)
+			plt.title('Histogram')
 		# In order to have a non-None return value, the plot must:
-		# - Have the horizontal red line above the magenta line,
+		# - Have the horizontal red line above the black line,
 		# - Have both yellow lines visible,
-		# - Have no points above the magenta line as well as to the right of the
-		#   	cyan line (if it exists), and
 		# - Have no points above the magenta line as well as to the left of the
+		#   	cyan line (if it exists), and
+		# - Have no points above the magenta line as well as to the right of the
 		#   	green line (if it exists).
 		plt.plot(histogram)
+		plt.xlim([0, len(histogram)])
+		plt.ylim([0, max(max_value, vertical_threshold + 3)])
 		plt.axhline(y=max_value, color='r')
 		plt.axvline(x=max_index, color='r')
 		plt.axhline(y=vertical_threshold, color='k')
@@ -167,8 +159,9 @@ def find_histogram_maximum(histogram, left_threshold, right_threshold, vertical_
 			plt.axvline(x=max_index + right_threshold//2, color='y')
 			if max_index + right_threshold < len(histogram):
 				plt.axvline(x=max_index + right_threshold, color='g')
-		plt.show()
-	#'''
+		if subplot_num is None:
+			plt.show()
+		# else we assume that plt.show() will get called elsewhere
 	if max_value < vertical_threshold:
 		# Max is too small
 		return None
@@ -208,6 +201,10 @@ def find_right_histogram_maximum(histogram, scale=1.15, horizontal_threshold=DEF
 	return find_histogram_maximum(histogram, int(horizontal_threshold*scale), horizontal_threshold, **kwargs)
 
 
+# Somewhat-arbitrary constant defining that a region of an image has "enough"
+# yellow to be confident that the lane marking is in fact yellow and not white.
+YELLOW_THRESHOLD = 200 # count of pixels in a binary image
+
 def points_on_lines(warped, strip_size=50, hood_size=10, debug=False):
 	'''
 	Performs binary thresholding on the specified image, then scans horizontal
@@ -215,25 +212,69 @@ def points_on_lines(warped, strip_size=50, hood_size=10, debug=False):
 	points, one for each line. They may not be the same length if one line
 	couldn't be found in a given strip.
 	'''
+	# By default, use grayscale and binary thresholding
 	gray = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
+	# But if one or both of the lanes is yellow, prefer the HSV mask instead
+	vhalf = warped.shape[1]//2
+	lyellow = yellow_mask(warped[:, :vhalf])
+	ryellow = yellow_mask(warped[:, vhalf:])
+	(use_lyellow, use_ryellow) = (lyellow.sum() >= YELLOW_THRESHOLD, ryellow.sum() >= YELLOW_THRESHOLD)
+	'''
+	# This is obvious enough from the titles of the binary strips plotted below.
+	if debug:
+		print('Using yellow for left? {} ({}). Right? {} ({}).'.format(use_lyellow, lyellow.sum(), use_ryellow, ryellow.sum()))
+	'''
 	left_points = []
 	right_points = []
-	bottom_row = gray.shape[0] - hood_size
+	bottom_row = warped.shape[0] - hood_size
 	# We care more about finer accuracy at the bottom of the image, so we put
 	# the potential partial strip down there.
 	for strip_begin in range(0, bottom_row, strip_size):
 		strip_end = min(strip_begin + strip_size, bottom_row)
-		hist = strip_threshold_and_histogram(gray, strip_begin, strip_end, debug)
-		half = len(hist)//2
-		lmax = find_left_histogram_maximum(hist[:half], debug=debug)
-		rmax = find_right_histogram_maximum(hist[half:], debug=debug) # Offset!
+
+		if use_lyellow:
+			lstrip = lyellow[strip_begin:strip_end, :]
+		else:
+			lstrip = threshold(gray[strip_begin:strip_end, :vhalf])
+		lhist = histogram(lstrip)
+		lmax = find_left_histogram_maximum(lhist, debug=debug, subplot_num=325)
+
+		if use_ryellow:
+			rstrip = ryellow[strip_begin:strip_end, :]
+		else:
+			rstrip = threshold(gray[strip_begin:strip_end, vhalf:])
+		rhist = histogram(rstrip)
+		rmax = find_right_histogram_maximum(rhist, debug=debug, subplot_num=326) # Offset!
+
 		if lmax is not None:
 			point = (lmax, (strip_begin + strip_end)//2)
 			left_points.append(point)
 		if rmax is not None:
-			rmax += half # No cute way to inline this correction
+			rmax += vhalf # No cute way to inline this correction
 			point = (rmax, (strip_begin + strip_end)//2)
 			right_points.append(point)
+
+		if debug:
+			# Left stuff in one column
+			plt.subplot(321)
+			plt.imshow(cv2.cvtColor(warped[strip_begin:strip_end, :vhalf], cv2.COLOR_BGR2RGB))
+			plt.title('Left strip')
+			plt.subplot(323)
+			plt.imshow(lstrip, cmap='gray')
+			plt.title('Binary ({})'.format('gray' if not use_lyellow else 'yellow'))
+			# 325 gets populated from find_left_histogram_maximum call
+			# Right stuff in the other
+			plt.subplot(322)
+			plt.imshow(cv2.cvtColor(warped[strip_begin:strip_end, vhalf:], cv2.COLOR_BGR2RGB))
+			plt.title('Right strip')
+			plt.subplot(324)
+			plt.imshow(rstrip, cmap='gray')
+			plt.title('Binary ({})'.format('gray' if not use_ryellow else 'yellow'))
+			# 326 gets populated from find_right_histogram_maximum call
+			# General housekeeping and prettification
+			plt.suptitle('Strip {} to {}; left = {}, right = {}'.format(strip_begin, strip_end, lmax, rmax))
+			plt.tight_layout()
+			plt.show()
 	return (np.array(left_points, dtype=np.int32), np.array(right_points, dtype=np.int32))
 
 
@@ -281,6 +322,10 @@ def paint_lane(warped, left_points, right_points, alpha=0.25):
 	if len(left_points) == 0 and len(right_points) == 0:
 		# Nothing to draw
 		return painted_lane
+	if len(left_points) != 0 and len(right_points) != 0:
+		# We actually have a polygon to fill. Method assumes that points are in
+		# clockwise order.
+		cv2.fillConvexPoly(painted_lane, np.concatenate((left_points, right_points[::-1])), (0, 255, 0))
 	if len(left_points) > 1:
 		# Need 2 or more points to draw a line
 		cv2.polylines(painted_lane, [left_points], False, (255, 0, 255), thickness=5)
@@ -291,10 +336,6 @@ def paint_lane(warped, left_points, right_points, alpha=0.25):
 		cv2.circle(painted_lane, tuple(left_point), 1, (255, 0, 0), thickness=10)
 	for right_point in right_points:
 		cv2.circle(painted_lane, tuple(right_point), 1, (0, 0, 255), thickness=10)
-	if len(left_points) != 0 and len(right_points) != 0:
-		# We actually have a polygon to fill. Method assumes that points are in
-		# clockwise order.
-		cv2.fillConvexPoly(painted_lane, np.concatenate((left_points, right_points[::-1])), (0, 255, 0))
 	return cv2.addWeighted(painted_lane, alpha, warped, 1 - alpha, 0)
 
 
@@ -307,8 +348,6 @@ def detect_lines(image, debug=False):
 	(warped, trapezoid_points, warp_matrix) = get_birds_eye_view(image)
 	if debug:
 		show_with_axes('Warped', warped)
-
-	#yellowlane(warped)
 
 	(left_points, right_points) = interpolate_bottom_of_lines(points_on_lines(warped, debug=debug), warped.shape[0] - 1)
 	# Alternatively, without interpolation to the very bottom:
@@ -327,19 +366,23 @@ def detect_lines(image, debug=False):
 	return superimposed
 
 
-def yellowlane(image):
+def yellow_mask(image):
 	'''
-	Convert image to hsv to get yellow channel, and gray scale to get white channel
+	Convert image to hsv to get a mask covering yellow parts of the image.
+	Output is a binary image in the range [0, 1].
 	'''
 	hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-	lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
-	gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-	lowery = np.array([20, 100, 100], dtype="uint8")
-	uppery = np.array([30, 255, 255], dtype="uint8")
-	grays = cv2.inRange(gray, 200, 255)
+#	lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
+#	gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+#	grays = cv2.inRange(gray, 200, 255)
+	lowery = np.array([20, 100, 100], dtype=np.uint8)
+	uppery = np.array([30, 255, 255], dtype=np.uint8)
 	yellow = cv2.inRange(hsv, lowery, uppery)
+	'''
 	show_with_axes('hsv', hsv)
 	show_with_axes('lab', lab)
 	show_with_axes('gray', gray)
 	show_with_axes('grays', grays)
 	show_with_axes('yellows', yellow)
+	'''
+	return yellow.astype('bool') # Normalizes to [0, 1]
