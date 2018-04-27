@@ -6,7 +6,7 @@ import cv2
 import sys
 import os
 from lane_detection import detect_lines
-#from vehicle_detection import detect_vehicles
+from vehicle_detection import detect_vehicles
 
 
 #Set of supported image formats
@@ -15,7 +15,27 @@ EXTENSIONS = set(['jpg','jpeg','jif','jfif','jp2','j2k','j2c','fpx','tif', \
 				  'cgm','svg'])
 
 # Set of supported video formats
-VIDEO_EXTENSIONS = set(['mp4', 'avi'])
+VIDEO_EXTENSIONS = set(['mp4','avi'])
+
+
+def write_result(imgs,img,name):
+    '''
+    Write the images resulting from transformations and morphology
+    @params:
+        imgs: list of all images
+        img: the resultant image post manipulation
+        name: the name descriptor for the image
+    @returns:
+        None
+    '''
+    newfile = '.'.join(PATH.split('.')[:-1]) + '_'+name+'.jpg' #+ PATH.split('.')[-1]
+
+    if imgs != None:
+        # Create side-by-side comparison and write
+        result = np.hstack(imgs)
+        cv2.imwrite(newfile, result)
+    else:
+        cv2.imwrite(newfile, img)
 
 
 def perceive_road(file, debug=False):
@@ -26,12 +46,13 @@ def perceive_road(file, debug=False):
 	@returns:
 		TBD
 	'''
-	painted = detect_lines(cv2.imread(file), debug=debug)
-	cv2.imshow(file, painted)
+	road = cv2.imread(file)
+	painted = detect_lines(road, debug=debug)
+	painted = detect_vehicles(road, painted)
+	cv2.imshow('Painted', painted)
 	cv2.waitKey(0)
 	cv2.destroyAllWindows()
 	cv2.waitKey(1)
-	#detect_vehicles()
 
 
 def perceive_road_video(file):
@@ -60,6 +81,7 @@ def perceive_road_video(file):
 			break
 		# Set debug to false os we don't show anything with pyplot and block
 		painted = detect_lines(frame, is_our_dashcam=is_our_dashcam, debug=debug, paint_extra=paint_extra)
+		painted = detect_vehicles(frame, painted, True)
 		cv2.imshow(file, painted)
 		# 25 ms is suggested for smooth video playback, 1 seems to work too
 		# Debug makes it annoying to escape the loop, so wait forever if it's on
@@ -105,6 +127,8 @@ if __name__ == '__main__':
 
 	for file in sys.argv[1:]:
 		ext = file.split('.')[1].lower()
+		global PATH
+		PATH = file
 		if os.path.isdir(file):
 			print('Error: cannot supply directory - ' + str(file))
 		elif ext in EXTENSIONS:
