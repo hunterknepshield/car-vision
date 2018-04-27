@@ -185,5 +185,5 @@ def detect_vehicles(road,lane,video=False):
     else:
         detected,lane = object_ahead(road,lane)
         if detected:
-            return lane
             calc_distance()
+            return lane
