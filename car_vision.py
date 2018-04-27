@@ -17,6 +17,28 @@ EXTENSIONS = set(['jpg','jpeg','jif','jfif','jp2','j2k','j2c','fpx','tif', \
 # Set of supported video formats
 VIDEO_EXTENSIONS = set(['mp4','avi'])
 
+#Set path
+PATH = '/'
+
+
+def write_result(imgs,img,name):
+    '''
+    Write the images resulting from transformations and morphology
+    @params:
+        imgs: list of all images
+        img: the resultant image post manipulation
+        name: the name descriptor for the image
+    @returns:
+        None
+    '''
+    newfile = '.'.join(PATH.split('.')[:-1]) + '_'+name+'.' + PATH.split('.')[-1]
+
+    if imgs != None:
+        # Create side-by-side comparison and write
+        result = np.hstack(imgs)
+        cv2.imwrite(newfile, result)
+    else:
+        cv2.imwrite(newfile, img)
 
 
 def perceive_road(file, debug=False):
@@ -68,6 +90,8 @@ if __name__ == '__main__':
 
 	for file in sys.argv[1:]:
 		ext = file.split('.')[1].lower()
+		global PATH
+		PATH = file
 		if os.path.isdir(file):
 			print('Error: cannot supply directory - ' + str(file))
 		elif ext in EXTENSIONS:

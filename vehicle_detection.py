@@ -8,26 +8,6 @@ import numpy as np
 from lane_detection import show
 
 
-def write_result(imgs,img,name):
-    '''
-    Write the images resulting from transformations and morphology
-    @params:
-        imgs: list of all images
-        img: the resultant image post manipulation
-        name: the name descriptor for the image
-    @returns:
-        None
-    '''
-    newfile = '.'.join(PATH.split('.')[:-1]) + '_'+name+'.' + PATH.split('.')[-1]
-
-    if imgs != None:
-        # Create side-by-side comparison and write
-        result = np.hstack(imgs)
-        cv2.imwrite(newfile, result)
-    else:
-        cv2.imwrite(newfile, img)
-
-
 def error(imgA, imgB):
     '''
     Calculate the mean squared error
@@ -146,10 +126,11 @@ def object_ahead(road,lane):
     roi = []
     cascade = cv2.CascadeClassifier('cars.xml')
 
-    #for i in range(1,4):
+    #TODO:(rjswitzer3) Determine best course of action
+    #for i in range(2,3):
     #    roi.append( decipher_car(road, cascade, i) )
     #regions = [r for region in roi for r in region]
-    regions = decipher_car(road, cascade, 2)
+    regions = decipher_car(road, cascade)
 
     for region in regions:
         if new_roi(region[0],region[1],region[2],region[3],rectangles):
