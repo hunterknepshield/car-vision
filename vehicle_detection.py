@@ -77,9 +77,6 @@ def decipher_car(road, cascade, scalar=2, downsize=True):
     @return:
         roi: regions within the image that contain cars
     '''
-    #TODO(rjswitzer3) -
-    # 1. Fix Mean squared error shenanigans
-    # 2. Need to look into other means of filtering false positives
     roi = []
     h,w,c = road.shape
 
@@ -100,13 +97,11 @@ def decipher_car(road, cascade, scalar=2, downsize=True):
     minY = road.shape[0]-(road.shape[0]*0.2)
     for (x,y,w,h) in cars:
         car = road[y:y+h, x:x+w]
-        #show('CAR',car) #TODO TESTING
         if y <  minY:
             diffX = round(diff_horizontal(car))
             diffY = round(diff_vertical(car))
 
             print('(dX->'+str(diffX)+', dY->'+str(diffY)+')') #TODO TESTING
-            #[1600,3000,12000], [1600,16000,6000], [1600,7000], [1000,2000]
             if diffX > 1000 and diffY > 2000:
                 roi.append( [x*scalar,y*scalar,w*scalar,h*scalar])
 
