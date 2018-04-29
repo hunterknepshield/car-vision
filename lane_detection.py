@@ -477,4 +477,4 @@ def detect_lines(image, is_our_dashcam=False, debug=False, paint_extra=False):
 		paint_trapezoid(superimposed, trapezoid_points)
 	if debug:
 		show_with_axes('Superimposed', superimposed)
-	return superimposed
+	return (superimposed,trapezoid_points)

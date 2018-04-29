@@ -136,9 +136,9 @@ def object_ahead(road,lane):
         cv2.rectangle(lane,(r[0],r[1]),(r[0]+r[2],r[1]+r[3]),(0,0,255),3)
 
     if len(rectangles) > 0:
-        return [True,lane]
+        return [True,lane,rectangles]
     else:
-        return [False,lane]
+        return [False,lane,rectangles]
 
 
 def calc_distance():
@@ -151,6 +151,7 @@ def calc_distance():
     '''
     print('Calculating distance to object ahead...')
     #TODO Implement
+
 
 
 def collate_velocity():
@@ -175,10 +176,10 @@ def detect_vehicles(road,lane,video=False):
         TBD
     '''
     if video:
-        detected,lane = object_ahead(road,lane)
-        return lane
+        detected,lane,rectangle = object_ahead(road,lane)
+        return (lane,rectangle)
     else:
-        detected,lane = object_ahead(road,lane)
+        detected,lane,rectangle = object_ahead(road,lane)
         if detected:
             calc_distance()
-            return lane
+            return (lane,rectangle)
