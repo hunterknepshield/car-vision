@@ -153,7 +153,11 @@ def mask_gray(gray):
 	methods for grayscale images if necessary. Returns a binary image in the
 	range [0, 1].
 	'''
-	return cv2.threshold(gray, 0, 1, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+
+    sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0)
+    abs_sobelx = np.absolute(sobelx)
+    scaled_sobel = np.uint8(255 * abs_sobelx / np.max(abs_sobelx))
+	return cv2.threshold(scaled_sobel, 0, 1, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
 
 
 def histogram(binary):
@@ -258,6 +262,9 @@ def points_on_lines(warped, strip_size=50, hood_size=10, debug=False):
 	couldn't be found in a given strip.
 	'''
 	# By default, use grayscale and binary thresholding
+    #hsv = cv2.cvtColor(warped,cv2.COLOR_BGR2HSV)
+    #h,s,v = cv2.split(hsv)
+
 	gray = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
 	# But if one or both of the lanes is yellow, prefer the HSV mask instead
 	vhalf = warped.shape[1]//2
