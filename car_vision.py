@@ -18,6 +18,9 @@ EXTENSIONS = set(['jpg','jpeg','jif','jfif','jp2','j2k','j2c','fpx','tif', \
 # Set of supported video formats
 VIDEO_EXTENSIONS = set(['mp4','avi'])
 
+#Cascade classifer consuming pre-trained cascade file for car claffication
+CASCADE = cv2.CascadeClassifier('cars.xml')
+
 
 def write_result(imgs,img,name):
     '''
@@ -50,7 +53,7 @@ def perceive_road(file, debug=False):
 	road = cv2.imread(file)
 	painted = detect_lines(road, debug=debug)
 	trapp = painted[1]
-	painted = detect_vehicles(road, painted[0])
+	painted = detect_vehicles(road, painted[0], CASCADE, video=False)
 	paint = painted[0]
 	rectangle = painted[1]
 	paint = getdistance(trapp,rectangle, paint)
@@ -87,7 +90,7 @@ def perceive_road_video(file):
 		# Set debug to false os we don't show anything with pyplot and block
 		painted = detect_lines(frame, is_our_dashcam=is_our_dashcam, debug=debug, paint_extra=paint_extra)
 		trapp = painted[1]
-		painted = detect_vehicles(frame, painted[0], True)
+		painted = detect_vehicles(frame, painted[0], CASCADE, video=True)
 		paint = painted[0]
 		rectangle = painted[1]
 		paints = getdistance(trapp, rectangle, paint)

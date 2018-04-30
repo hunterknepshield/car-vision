@@ -153,10 +153,9 @@ def mask_gray(gray):
 	methods for grayscale images if necessary. Returns a binary image in the
 	range [0, 1].
 	'''
-
-    sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0)
-    abs_sobelx = np.absolute(sobelx)
-    scaled_sobel = np.uint8(255 * abs_sobelx / np.max(abs_sobelx))
+	sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0)
+	abs_sobelx = np.absolute(sobelx)
+	scaled_sobel = np.uint8(255 * abs_sobelx / np.max(abs_sobelx))
 	return cv2.threshold(scaled_sobel, 0, 1, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
 
 
