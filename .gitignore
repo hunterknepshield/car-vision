@@ -105,3 +105,6 @@ venv.bak/
 
 # Finder is annoying
 .DS_Store
+
+# JetBrains IDEs are also annoying
+.idea/
