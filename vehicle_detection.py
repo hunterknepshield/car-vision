@@ -141,10 +141,7 @@ def object_ahead(road, lane, cascade):
         cv2.rectangle(lane,(r[0],r[1]),(r[0]+r[2],r[1]+r[3]),(0,0,255),3)
 
     #Naive approach
-    if len(rectangles) > 0:
-        return [True,lane,rectangles]
-    else:
-        return [False,lane,rectangles]
+    return (len(rectangles) > 0, lane, rectangles)
 
 
 def detect_vehicles(road,lane,cascade,video=False):

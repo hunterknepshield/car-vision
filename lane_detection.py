@@ -261,9 +261,6 @@ def points_on_lines(warped, strip_size=50, hood_size=10, debug=False):
 	couldn't be found in a given strip.
 	'''
 	# By default, use grayscale and binary thresholding
-    #hsv = cv2.cvtColor(warped,cv2.COLOR_BGR2HSV)
-    #h,s,v = cv2.split(hsv)
-
 	gray = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
 	# But if one or both of the lanes is yellow, prefer the HSV mask instead
 	vhalf = warped.shape[1]//2
