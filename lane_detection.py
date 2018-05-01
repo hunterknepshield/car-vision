@@ -156,7 +156,8 @@ def mask_gray(gray):
     sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0)
     abs_sobelx = np.absolute(sobelx)
     scaled_sobel = np.uint8(255 * abs_sobelx / np.max(abs_sobelx))
-    return cv2.threshold(scaled_sobel, 0, 1, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+    thresholded = cv2.threshold(scaled_sobel, 0, 1, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+    return thresholded
 
 
 def histogram(binary):
@@ -359,7 +360,7 @@ def interpolate_bottom_of_lines(lines, bottom_row, polynomial_degree=1):
     return (left_interp, right_interp)
 
 
-def interpolate_top_of_lines(lines, polynomial_degree=2):
+def interpolate_top_of_lines(lines, top_middle, polynomial_degree=2):
     '''
     If the top of the lines don't have the same Y coordinate, we want to
     interpolate so they don't have an ugly trapezoid-ish shape at the top. Only
@@ -376,7 +377,7 @@ def interpolate_top_of_lines(lines, polynomial_degree=2):
     right_ymin = np.min(right_points[:, 1])
     (left_interp, right_interp) = (None, None)
     if left_ymin < right_ymin:
-        # Need to interpolate right line
+        # Need to interpolate right line.
         # We ideally want a quadratic, but if we can't get that, a line should
         # be relatively decent still.
         while len(right_points) <= polynomial_degree:
@@ -385,13 +386,22 @@ def interpolate_top_of_lines(lines, polynomial_degree=2):
             # Interpolate the right line
             right_line = np.polyfit(right_points[:, 1], right_points[:, 0], polynomial_degree)
             right_interp = np.array([[np.polyval(right_line, left_ymin), left_ymin]], dtype=right_points.dtype)
+            # Make sure we didn't cross the middle of the trapezoid
+            if right_interp[0, 0] < top_middle or right_interp[0, 0] > top_middle*2:
+                right_interp = None
     elif right_ymin < left_ymin and len(left_points) > polynomial_degree:
+        # Need to interpolate left line.
+        # We ideally want a quadratic, but if we can't get that, a line should
+        # be relatively decent still.
         while len(left_points) <= polynomial_degree:
             polynomial_degree -= 1
         if polynomial_degree > 0:
             # Interpolate the left line
             left_line = np.polyfit(left_points[:, 1], left_points[:, 0], polynomial_degree)
             left_interp = np.array([[np.polyval(left_line, right_ymin), right_ymin]], dtype=left_points.dtype)
+            # Make sure we didn't cross the middle of the trapezoid
+            if left_interp[0, 0] > top_middle or left_interp[0, 0] < 0:
+                left_interp = None
     # If both lines already have the same highest point, no interpolation needed
     return (left_interp, right_interp)
 
@@ -445,7 +455,7 @@ def detect_lines(image, is_our_dashcam=False, debug=False, paint_extra=False):
         # Show results without interpolation
         painted_no_interp = paint_lane(unblurred_warped.copy(), lines[0], lines[1])
     # We don't want the interpolations interfering with each other
-    top_interp = interpolate_top_of_lines(lines)
+    top_interp = interpolate_top_of_lines(lines, warped.shape[1]//2)
     bottom_interp = interpolate_bottom_of_lines(lines, warped.shape[0] - 1)
     (left_points, right_points) = lines
     interpolated = False
